@@ -278,6 +278,94 @@ describe("workflow vertical slice", () => {
     expect(run.status).toBe("completed");
     expect(run.stageRuns[0]?.attempts).toBe(2);
   });
+  it("escalates when a harness returns a different artifact type", async () => {
+    const repositories = new InMemoryRepositories();
+    const adapter = new ScriptedHarnessAdapter({
+      planning: ({ runId }) =>
+        events(
+          runId,
+          artifact("test-report", "planning", "initial", {
+            revision: "initial",
+            passed: true,
+            tests: 1,
+          }),
+        ),
+    });
+    const planner = agent("planner");
+    const engine = new WorkflowEngine(
+      repositories,
+      adapter,
+      WorkflowDefinitionSchema.parse({
+        apiVersion: "agent-factory.dev/v1alpha1",
+        kind: "Workflow",
+        metadata: { id: "output-contract", version: "1" },
+        stages: [
+          {
+            id: "planning",
+            kind: "agent",
+            agentId: "planner",
+            outputArtifact: "implementation-plan",
+          },
+        ],
+      }),
+      new Map([[planner.metadata.id, planner]]),
+      new Map([[skill.name, skill]]),
+      new Map([[profile.id, profile]]),
+    );
+
+    const run = await engine.submit("reject incorrect output");
+
+    expect(run.status).toBe("escalated");
+    expect(run.escalationReason).toContain("expected implementation-plan");
+    expect(await repositories.artifacts.list(run.id)).toEqual([]);
+  });
+  it("records artifact provenance from the trusted task boundary", async () => {
+    const repositories = new InMemoryRepositories();
+    const returned = artifact("implementation-plan", "untrusted-stage", "untrusted-revision", {
+      summary: "p",
+      steps: ["x"],
+      acceptanceCriteria: ["x"],
+    });
+    returned.producer = { kind: "human", id: "untrusted-producer" };
+    returned.validation = { valid: false, errors: ["untrusted"] };
+    returned.inputArtifactIds = ["untrusted-input"];
+    const adapter = new ScriptedHarnessAdapter({
+      planning: ({ runId }) => events(runId, returned),
+    });
+    const planner = agent("planner");
+    const engine = new WorkflowEngine(
+      repositories,
+      adapter,
+      WorkflowDefinitionSchema.parse({
+        apiVersion: "agent-factory.dev/v1alpha1",
+        kind: "Workflow",
+        metadata: { id: "provenance", version: "1" },
+        stages: [
+          {
+            id: "planning",
+            kind: "agent",
+            agentId: "planner",
+            outputArtifact: "implementation-plan",
+          },
+        ],
+      }),
+      new Map([[planner.metadata.id, planner]]),
+      new Map([[skill.name, skill]]),
+      new Map([[profile.id, profile]]),
+    );
+
+    const run = await engine.submit("bind provenance");
+    const [saved] = await repositories.artifacts.list(run.id);
+
+    expect(run.status).toBe("completed");
+    expect(saved).toMatchObject({
+      producingStageId: "planning",
+      producer: { kind: "agent", id: "planner" },
+      inputArtifactIds: [],
+      validation: { valid: true, errors: [] },
+      sourceRevision: "initial",
+    });
+  });
   it("pauses, resumes, remediates a failed review, invalidates stale evidence, and completes", async () => {
     const repositories = new InMemoryRepositories();
     let construction = 0;
