@@ -98,10 +98,19 @@ abstract class ExternalHarnessScaffold implements HarnessAdapter {
   async materialize(input: MaterializeHarnessInput): Promise<MaterializedHarnessConfig> {
     return materialize(this.id, this.nativeDirectory(), input);
   }
-  async *run(_input: HarnessRunInput): AsyncIterable<AgentEvent> {
-    throw new UnsupportedHarnessOperationError(this.id, "run");
+  run(input: HarnessRunInput): AsyncIterableIterator<AgentEvent> {
+    void input;
+    const error = new UnsupportedHarnessOperationError(this.id, "run");
+    const iterator: AsyncIterableIterator<AgentEvent> = {
+      next: () => Promise.reject(error),
+      [Symbol.asyncIterator]() {
+        return this;
+      },
+    };
+    return iterator;
   }
-  async cancel(_runId: string): Promise<void> {
+  async cancel(runId: string): Promise<void> {
+    void runId;
     throw new UnsupportedHarnessOperationError(this.id, "cancel");
   }
 }

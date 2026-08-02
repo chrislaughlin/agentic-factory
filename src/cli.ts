@@ -2,12 +2,7 @@
 import { randomUUID } from "node:crypto";
 import { resolve } from "node:path";
 import { parseArgs } from "node:util";
-import {
-  AgentDefinitionSchema,
-  ModelProfileSchema,
-  type AgentEvent,
-  type ArtifactInstance,
-} from "./domain.js";
+import { ModelProfileSchema, type AgentEvent, type ArtifactInstance } from "./domain.js";
 import { ScriptedHarnessAdapter } from "./harness.js";
 import { loadAgent, loadSkills, loadWorkflow } from "./loader.js";
 import { InMemoryRepositories } from "./repositories.js";
