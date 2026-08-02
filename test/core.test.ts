@@ -226,6 +226,119 @@ describe("workflow vertical slice", () => {
     lease.release("construction-1");
     expect(() => lease.acquire("testing-1")).not.toThrow();
   });
+  it("restricts agent permissions to the stage permission boundary", async () => {
+    const repositories = new InMemoryRepositories();
+    let receivedPermissions: unknown;
+    const adapter = new ScriptedHarnessAdapter({
+      construction: ({ runId, task }) => {
+        receivedPermissions = task.permissions;
+        return events(
+          runId,
+          artifact("source-change", "construction", "r1", {
+            revision: "r1",
+            changedPaths: ["src/x.ts"],
+            changeKind: "source",
+          }),
+        );
+      },
+    });
+    const constructor = AgentDefinitionSchema.parse({
+      ...agent("constructor", true),
+      spec: {
+        ...agent("constructor", true).spec,
+        permissions: {
+          filesystem: "workspace-write",
+          network: "allow",
+          commands: ["pnpm test", "pnpm build"],
+        },
+      },
+    });
+    const engine = new WorkflowEngine(
+      repositories,
+      adapter,
+      WorkflowDefinitionSchema.parse({
+        apiVersion: "agent-factory.dev/v1alpha1",
+        kind: "Workflow",
+        metadata: { id: "least-privilege", version: "1" },
+        stages: [
+          {
+            id: "construction",
+            kind: "agent",
+            agentId: "constructor",
+            outputArtifact: "source-change",
+            permissions: {
+              filesystem: "read-only",
+              network: "deny",
+              commands: ["pnpm test"],
+            },
+          },
+        ],
+      }),
+      new Map([[constructor.metadata.id, constructor]]),
+      new Map([[skill.name, skill]]),
+      new Map([[profile.id, profile]]),
+    );
+
+    const run = await engine.submit("use the least privilege permissions");
+
+    expect(run.status).toBe("completed");
+    expect(receivedPermissions).toEqual({
+      filesystem: "read-only",
+      network: "deny",
+      commands: ["pnpm test"],
+    });
+  });
+  it("does not let a stage grant permissions absent from the agent definition", async () => {
+    const repositories = new InMemoryRepositories();
+    let receivedPermissions: unknown;
+    const adapter = new ScriptedHarnessAdapter({
+      planning: ({ runId, task }) => {
+        receivedPermissions = task.permissions;
+        return events(
+          runId,
+          artifact("implementation-plan", "planning", "initial", {
+            summary: "p",
+            steps: ["x"],
+            acceptanceCriteria: ["x"],
+          }),
+        );
+      },
+    });
+    const planner = agent("planner");
+    const engine = new WorkflowEngine(
+      repositories,
+      adapter,
+      WorkflowDefinitionSchema.parse({
+        apiVersion: "agent-factory.dev/v1alpha1",
+        kind: "Workflow",
+        metadata: { id: "no-elevation", version: "1" },
+        stages: [
+          {
+            id: "planning",
+            kind: "agent",
+            agentId: "planner",
+            outputArtifact: "implementation-plan",
+            permissions: {
+              filesystem: "workspace-write",
+              network: "allow",
+              commands: ["rm -rf"],
+            },
+          },
+        ],
+      }),
+      new Map([[planner.metadata.id, planner]]),
+      new Map([[skill.name, skill]]),
+      new Map([[profile.id, profile]]),
+    );
+
+    await engine.submit("do not elevate permissions");
+
+    expect(receivedPermissions).toEqual({
+      filesystem: "read-only",
+      network: "deny",
+      commands: [],
+    });
+  });
   it("retries retryable harness failures within the stage limit", async () => {
     const repositories = new InMemoryRepositories();
     let attempts = 0;

@@ -8,6 +8,7 @@ import {
   type ApprovalRequest,
   type ArtifactInstance,
   type ModelProfile,
+  type PermissionSet,
   type SkillDefinition,
   type StageDefinition,
   type StageRun,
@@ -35,6 +36,21 @@ export class WorkspaceWriterLease {
   release(stageRunId: string): void {
     if (this.holder === stageRunId) this.holder = undefined;
   }
+}
+
+function restrictPermissions(agent: PermissionSet, stage?: PermissionSet): PermissionSet {
+  if (!stage) return agent;
+  const filesystemRank = { deny: 0, "read-only": 1, "workspace-write": 2 } as const;
+  const filesystem =
+    filesystemRank[agent.filesystem] <= filesystemRank[stage.filesystem]
+      ? agent.filesystem
+      : stage.filesystem;
+  const allowedCommands = new Set(stage.commands);
+  return {
+    filesystem,
+    network: agent.network === "allow" && stage.network === "allow" ? "allow" : "deny",
+    commands: agent.commands.filter((command) => allowedCommands.has(command)),
+  };
 }
 
 export class WorkflowEngine {
@@ -163,7 +179,8 @@ export class WorkflowEngine {
     const agent = this.agents.get(definition.agentId);
     if (!agent) throw new Error(`Unknown agent ${definition.agentId}`);
     await assertHarnessCompatibility(this.harness, definition.requiredHarnessCapabilities);
-    if (agent.spec.permissions.filesystem === "workspace-write") {
+    const permissions = restrictPermissions(agent.spec.permissions, definition.permissions);
+    if (permissions.filesystem === "workspace-write") {
       this.writerLease.acquire(stage.id);
     }
     try {
@@ -197,7 +214,7 @@ export class WorkflowEngine {
         workspace: { root: ".", revision: run.revision },
         inputs: inputs.map((x) => ({ artifactId: x.id, type: x.type, version: x.version })),
         expectedOutput: { type: definition.outputArtifact!, version: "v1" },
-        permissions: agent.spec.permissions,
+        permissions,
         metadata: {},
       };
       let result: AgentResult | undefined;
