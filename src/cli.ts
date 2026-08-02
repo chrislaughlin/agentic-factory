@@ -5,16 +5,21 @@ import { parseArgs } from "node:util";
 import { ModelProfileSchema, type AgentEvent, type ArtifactInstance } from "./domain.js";
 import { ScriptedHarnessAdapter } from "./harness.js";
 import { loadAgent, loadSkills, loadWorkflow } from "./loader.js";
-import { InMemoryRepositories } from "./repositories.js";
+import { SqliteRepositories } from "./repositories.js";
 import { WorkflowEngine } from "./workflow.js";
 
-const { positionals } = parseArgs({ allowPositionals: true });
-if (positionals[0] !== "run") {
-  console.error("Usage: pnpm agent-factory run [work-item.yaml]");
+const { positionals, values } = parseArgs({
+  allowPositionals: true,
+  options: { database: { type: "string", short: "d" } },
+});
+if (!new Set(["run", "approve", "status"]).has(positionals[0] ?? "")) {
+  console.error(
+    "Usage: pnpm agent-factory <run [work-item.yaml] | approve <approval-id> [approver] | status <run-id>> [-d database]",
+  );
   process.exitCode = 1;
-} else await runDemo();
+} else await main();
 
-async function runDemo() {
+async function main() {
   const root = resolve(".");
   const workflow = await loadWorkflow(resolve(root, ".agent-factory/workflows"), "local-sdlc.yaml");
   const skills = await loadSkills(resolve(root, ".agents/skills"));
@@ -22,7 +27,9 @@ async function runDemo() {
   const agents = await Promise.all(
     agentIds.map((id) => loadAgent(resolve(root, ".agent-factory/agents"), `${id}.yaml`)),
   );
-  const repositories = new InMemoryRepositories();
+  const repositories = new SqliteRepositories(
+    resolve(root, values.database ?? ".agent-factory/factory.db"),
+  );
   for (const agent of agents) await repositories.agents.put(agent);
   for (const skill of skills) await repositories.skills.put(skill);
   let revision = 0;
@@ -89,28 +96,45 @@ async function runDemo() {
     new Map(skills.map((x) => [x.name, x])),
     new Map([[profile.id, profile]]),
   );
-  const workItemPath = positionals[1] ?? "examples/work-items/example.yaml";
-  const { parse } = await import("yaml");
-  const { readFile } = await import("node:fs/promises");
-  const workItem = parse(await readFile(resolve(root, workItemPath), "utf8")) as {
-    objective: string;
-  };
-  let run = await engine.submit(workItem.objective);
-  const approval = (await repositories.approvals.list(run.id))[0];
-  if (!approval) throw new Error("Workflow did not request approval");
-  console.log(`Plan awaiting approval: ${approval.id}`);
-  run = await engine.approve(approval.id, "local-human");
-  console.log(
-    JSON.stringify(
-      {
-        run,
-        artifacts: await repositories.artifacts.list(run.id),
-        events: await repositories.events.list(run.id),
-      },
-      null,
-      2,
-    ),
-  );
+  try {
+    if (positionals[0] === "run") {
+      const workItemPath = positionals[1] ?? "examples/work-items/example.yaml";
+      const { parse } = await import("yaml");
+      const { readFile } = await import("node:fs/promises");
+      const workItem = parse(await readFile(resolve(root, workItemPath), "utf8")) as {
+        objective: string;
+      };
+      const run = await engine.submit(workItem.objective);
+      const approval = (await repositories.approvals.list(run.id)).find(
+        (candidate) => candidate.status === "pending",
+      );
+      console.log(JSON.stringify({ runId: run.id, status: run.status, approvalId: approval?.id }));
+    } else if (positionals[0] === "approve") {
+      const approvalId = positionals[1];
+      if (!approvalId) throw new Error("approve requires an approval id");
+      const run = await engine.approve(approvalId, positionals[2] ?? "local-human");
+      console.log(JSON.stringify({ runId: run.id, status: run.status }));
+    } else {
+      const runId = positionals[1];
+      if (!runId) throw new Error("status requires a run id");
+      const run = await engine.get(runId);
+      if (!run) throw new Error(`Workflow not found: ${runId}`);
+      console.log(
+        JSON.stringify(
+          {
+            run,
+            approvals: await repositories.approvals.list(run.id),
+            artifacts: await repositories.artifacts.list(run.id),
+            events: await repositories.events.list(run.id),
+          },
+          null,
+          2,
+        ),
+      );
+    }
+  } finally {
+    repositories.close();
+  }
 }
 function artifact(
   type: string,

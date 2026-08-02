@@ -22,7 +22,7 @@ import {
   UnsupportedHarnessOperationError,
 } from "../src/harness.js";
 import { loadAgent, safeResolve, UnsafePathError } from "../src/loader.js";
-import { InMemoryRepositories } from "../src/repositories.js";
+import { InMemoryRepositories, SqliteRepositories } from "../src/repositories.js";
 import { ConcurrentWriterError, WorkflowEngine, WorkspaceWriterLease } from "../src/workflow.js";
 
 const timestamp = () => new Date().toISOString();
@@ -242,6 +242,64 @@ describe("artifacts", () => {
     expect(invalidateArtifacts([plan], "acceptance-criteria", "r2")[0]?.validation.valid).toBe(
       false,
     );
+  });
+});
+
+const sqliteDescribe = Number(process.versions.node.split(".")[0]) >= 22 ? describe : describe.skip;
+sqliteDescribe("SQLite repositories", () => {
+  it("persists workflow state and ordered logs across process instances", async () => {
+    const root = await mkdtemp(join(tmpdir(), "factory-sqlite-"));
+    const path = join(root, "factory.db");
+    const first = new SqliteRepositories(path);
+    const run = {
+      id: "wf-persisted",
+      workflowId: "slice",
+      objective: "persist me",
+      status: "waiting-approval" as const,
+      revision: "initial",
+      stageRuns: [],
+      remediationAttempts: 0,
+    };
+    const started = AgentEventSchema.parse({
+      type: "agent.started",
+      runId: "stage-planning",
+      agentId: "planner",
+      timestamp: timestamp(),
+    });
+    const completed = AgentEventSchema.parse({
+      type: "agent.message",
+      runId: "stage-planning",
+      content: "planned",
+      timestamp: timestamp(),
+    });
+    await first.workflowRuns.save(run);
+    await first.events.append(run.id, started);
+    await first.events.append(run.id, completed);
+    first.close();
+
+    const second = new SqliteRepositories(path);
+    await expect(second.workflowRuns.get(run.id)).resolves.toEqual(run);
+    await expect(second.events.list(run.id)).resolves.toEqual([started, completed]);
+    second.close();
+  });
+
+  it("replaces an artifact collection atomically", async () => {
+    const root = await mkdtemp(join(tmpdir(), "factory-sqlite-"));
+    const repositories = new SqliteRepositories(join(root, "factory.db"));
+    const oldArtifact = artifact("test-report", "test", "r1", {
+      revision: "r1",
+      passed: true,
+      tests: 1,
+    });
+    const newArtifact = artifact("test-report", "test", "r2", {
+      revision: "r2",
+      passed: true,
+      tests: 2,
+    });
+    await repositories.artifacts.save("wf-replace", oldArtifact);
+    await repositories.artifacts.replace("wf-replace", [newArtifact]);
+    await expect(repositories.artifacts.list("wf-replace")).resolves.toEqual([newArtifact]);
+    repositories.close();
   });
 });
 

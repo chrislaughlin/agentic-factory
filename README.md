@@ -53,10 +53,13 @@ Requires Node.js 22+ and pnpm.
 ```bash
 pnpm install
 pnpm agent-factory run examples/work-items/example.yaml
+# Use the printed approval and run identifiers in a later process:
+pnpm agent-factory approve <approval-id> local-human
+pnpm agent-factory status <run-id>
 pnpm validate
 ```
 
-The local command uses the deterministic scripted adapter, prints the approval identifier, simulates explicit local-human approval, fails the first review, remediates through the construction agent, invalidates old evidence, and completes on the second review. Programmatic callers may instead retain the repository and call `approve` later.
+The local command uses the deterministic scripted adapter and a transactional SQLite database at `.agent-factory/factory.db`. It prints the durable run and approval identifiers, then exits. The `approve` command can resume the workflow in a later process; the scripted review fails once, remediates through construction, invalidates old evidence, and completes on its second attempt. Pass `--database <path>` to any command to use a different database.
 
 ## Creating definitions
 
@@ -84,6 +87,6 @@ All definitions, prompts, repository content, tool output, and review comments a
 
 ## Known limitations / next phases
 
-The current persistence implementation is in-memory, and the CLI auto-approves only to demonstrate one process end-to-end. Codex, Claude Code, and OpenCode invocation/cancellation are honest scaffolds, not production integrations. Branch/worktree tooling, parallel read-only verification, Git hosting, event-driven CI/review monitors, deployment/rollback, distributed leases, budgets, and encrypted persistent audit storage are intentionally deferred behind the existing interfaces.
+The CLI persistence implementation is local SQLite; distributed leases and encrypted persistent audit storage remain future work. Codex, Claude Code, and OpenCode invocation/cancellation are honest scaffolds, not production integrations. Branch/worktree tooling, parallel read-only verification, Git hosting, event-driven CI/review monitors, deployment/rollback, and budgets are intentionally deferred behind the existing interfaces.
 
-Recommended next work: (1) add a transactional SQLite repository plus resumable CLI/API approval commands, (2) implement one real harness adapter and sandboxed deterministic tool service with secret redaction, and (3) extend the workflow with parallel security/QA review and event-driven Git/CI/deployment services.
+Recommended next work: (1) add a resumable API around the SQLite repository, (2) implement one real harness adapter and sandboxed deterministic tool service with secret redaction, and (3) extend the workflow with parallel security/QA review and event-driven Git/CI/deployment services.
