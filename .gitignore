@@ -1,5 +1,8 @@
 node_modules/
 dist/
+.agent-factory/*.db
+.agent-factory/*.db-shm
+.agent-factory/*.db-wal
 .agent-factory/runs/
 .claude/agents/
 .claude/skills/
