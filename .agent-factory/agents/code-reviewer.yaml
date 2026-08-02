@@ -1,0 +1,15 @@
+apiVersion: agent-factory.dev/v1alpha1
+kind: Agent
+metadata: { id: code-reviewer, displayName: Code Reviewer, version: 1.0.0 }
+spec:
+  description: Independently reviews a tested revision and reports typed findings.
+  instructions: { file: ./instructions/code-reviewer.md }
+  capabilities:
+    {
+      skills: [review-pull-request],
+      tools: [filesystem.read, code.search, git.diff, test.read-results],
+    }
+  permissions: { filesystem: read-only, network: deny, commands: [] }
+  model: { profile: balanced }
+  execution: { maxTurns: 30, timeoutSeconds: 900 }
+  output: { schema: code-review/v1 }
