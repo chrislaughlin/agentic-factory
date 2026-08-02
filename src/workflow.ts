@@ -218,13 +218,41 @@ export class WorkflowEngine {
       }
       if (!result?.artifact)
         return await this.escalate(run, stage, `Stage ${stage.stageId} produced no artifact`);
-      validateArtifactContent(result.artifact.type, result.artifact.content);
-      await this.repositories.artifacts.save(run.id, result.artifact);
-      stage.artifactIds.push(result.artifact.id);
+      if (result.status !== "succeeded")
+        return await this.escalate(run, stage, `Stage ${stage.stageId} reported a failed result`);
+      if (result.artifact.type !== definition.outputArtifact)
+        return await this.escalate(
+          run,
+          stage,
+          `Stage ${stage.stageId} produced ${result.artifact.type}; expected ${definition.outputArtifact}`,
+        );
+      try {
+        validateArtifactContent(result.artifact.type, result.artifact.content);
+      } catch (error) {
+        return await this.escalate(
+          run,
+          stage,
+          `Stage ${stage.stageId} produced an invalid artifact: ${error instanceof Error ? error.message : String(error)}`,
+        );
+      }
+      const sourceRevision =
+        result.artifact.type === "source-change"
+          ? (result.artifact.content as { revision: string }).revision
+          : run.revision;
+      const artifact: ArtifactInstance = {
+        ...result.artifact,
+        producingStageId: stage.stageId,
+        producer: { kind: "agent", id: agent.metadata.id },
+        inputArtifactIds: inputs.map((input) => input.id),
+        validation: { valid: true, errors: [] },
+        sourceRevision,
+      };
+      await this.repositories.artifacts.save(run.id, artifact);
+      stage.artifactIds.push(artifact.id);
       stage.status = "completed";
       await this.save(run, stage);
-      if (result.artifact.type === "source-change") {
-        const content = result.artifact.content as {
+      if (artifact.type === "source-change") {
+        const content = artifact.content as {
           revision: string;
           changeKind: "source" | "test" | "documentation";
         };
@@ -233,10 +261,10 @@ export class WorkflowEngine {
         await this.repositories.artifacts.replace(
           run.id,
           invalidateArtifacts(
-            artifacts.filter((x) => x.id !== result!.artifact!.id),
+            artifacts.filter((x) => x.id !== artifact.id),
             content.changeKind,
             run.revision,
-          ).concat(result.artifact),
+          ).concat(artifact),
         );
       }
     } finally {
