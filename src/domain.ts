@@ -70,6 +70,7 @@ export const StageDefinitionSchema = z.object({
   inputArtifacts: z.array(z.string()).default([]),
   outputArtifact: z.string().optional(),
   requiredHarnessCapabilities: z.array(z.string()).default([]),
+  commandIds: z.array(Id).default([]),
   permissions: PermissionSetSchema.optional(),
 });
 export type StageDefinition = z.infer<typeof StageDefinitionSchema>;
@@ -79,6 +80,7 @@ export const WorkflowDefinitionSchema = z
     apiVersion: z.literal(API_VERSION),
     kind: z.literal("Workflow"),
     metadata: z.object({ id: Id, version: z.string() }),
+    completionStatus: z.enum(["completed", "locally-verified"]).default("completed"),
     policy: PolicyDefinitionSchema.default({}),
     stages: z.array(StageDefinitionSchema).min(1),
   })
@@ -163,6 +165,9 @@ export const FindingSchema = z.object({
   severity: z.enum(["info", "low", "medium", "high", "critical"]),
   title: z.string(),
   description: z.string(),
+  evidence: z.string(),
+  sourceLocation: z.object({ path: z.string(), line: z.number().int().positive().optional() }),
+  revision: z.string(),
   fingerprint: z.string(),
   resolved: z.boolean().default(false),
 });
@@ -235,8 +240,31 @@ export interface WorkflowRun {
   id: string;
   workflowId: string;
   objective: string;
-  status: "running" | "waiting-approval" | "completed" | "escalated" | "cancelled";
+  status:
+    | "running"
+    | "waiting-approval"
+    | "locally-verified"
+    | "waiting-ci"
+    | "waiting-review"
+    | "waiting-final-approval"
+    | "merging"
+    | "deploying"
+    | "verifying"
+    | "completed"
+    | "rolled-back"
+    | "failed"
+    | "escalated"
+    | "cancelled";
   revision: string;
+  workspace?: { root: string; branch: string; baseRevision: string };
+  configuration?: {
+    harness: string;
+    workflow: string;
+    repository?: string;
+    baseBranch?: string;
+    modelProfile?: string;
+    policy?: string;
+  };
   stageRuns: StageRun[];
   remediationAttempts: number;
   escalationReason?: string;
@@ -246,6 +274,11 @@ export interface ApprovalRequest {
   workflowRunId: string;
   stageId: string;
   status: "pending" | "approved" | "rejected";
+  kind?: "plan" | "final";
+  revision?: string;
+  evidenceArtifactIds?: string[];
+  decidedBy?: string;
+  reason?: string;
   createdAt: string;
   decidedAt?: string;
 }

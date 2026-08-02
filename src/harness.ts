@@ -1,3 +1,4 @@
+import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
 import type {
   AgentDefinition,
   AgentEvent,
@@ -6,6 +7,7 @@ import type {
   SkillDefinition,
   TaskEnvelope,
 } from "./domain.js";
+import { AgentEventSchema } from "./domain.js";
 
 export interface MaterializeHarnessInput {
   agent: AgentDefinition;
@@ -88,6 +90,75 @@ export class ScriptedHarnessAdapter implements HarnessAdapter {
   }
   async cancel(runId: string): Promise<void> {
     this.cancelled.add(runId);
+  }
+}
+
+export interface ProcessHarnessCommand {
+  executable: string;
+  arguments?: string[];
+  cwd?: string;
+  timeoutMilliseconds?: number;
+}
+
+/** Executes a harness as a real local process using JSON on stdin and NDJSON events on stdout. */
+export class ProcessHarnessAdapter implements HarnessAdapter {
+  readonly id = "process";
+  private readonly children = new Map<string, ChildProcessWithoutNullStreams>();
+
+  constructor(private readonly command: ProcessHarnessCommand) {}
+
+  async inspectCapabilities(): Promise<HarnessCapabilities> {
+    return {
+      subagents: false,
+      nestedSubagents: false,
+      skills: true,
+      mcp: false,
+      structuredOutput: true,
+      backgroundExecution: true,
+      nativeWorktrees: false,
+    };
+  }
+
+  async materialize(input: MaterializeHarnessInput): Promise<MaterializedHarnessConfig> {
+    return materialize(this.id, ".agent-factory/generated/process", input);
+  }
+
+  async *run(input: HarnessRunInput): AsyncIterable<AgentEvent> {
+    const child = spawn(this.command.executable, this.command.arguments ?? [], {
+      cwd: this.command.cwd,
+      env: process.env,
+      stdio: ["pipe", "pipe", "pipe"],
+    });
+    this.children.set(input.runId, child);
+    child.stdin.end(JSON.stringify(input));
+    let stdout = "";
+    let stderr = "";
+    child.stdout.setEncoding("utf8");
+    child.stderr.setEncoding("utf8");
+    child.stdout.on("data", (chunk: string) => (stdout += chunk));
+    child.stderr.on("data", (chunk: string) => (stderr += chunk));
+    const timeout = setTimeout(
+      () => child.kill("SIGTERM"),
+      this.command.timeoutMilliseconds ?? 60_000,
+    );
+    const exitCode = await new Promise<number | null>((resolve, reject) => {
+      child.once("error", reject);
+      child.once("close", resolve);
+    }).finally(() => {
+      clearTimeout(timeout);
+      this.children.delete(input.runId);
+    });
+    if (exitCode !== 0)
+      throw new Error(
+        `Harness process exited with ${String(exitCode)}${stderr ? `: ${stderr.trim()}` : ""}`,
+      );
+    for (const line of stdout.split(/\r?\n/u).filter(Boolean)) {
+      yield AgentEventSchema.parse(JSON.parse(line));
+    }
+  }
+
+  async cancel(runId: string): Promise<void> {
+    this.children.get(runId)?.kill("SIGTERM");
   }
 }
 

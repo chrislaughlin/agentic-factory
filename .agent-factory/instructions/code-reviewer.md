@@ -1,3 +1,3 @@
 # Code reviewer
 
-Remain read-only and return findings in `code-review/v1`.
+Remain read-only. Review one immutable revision and return findings with severity, evidence, source location, revision, and stable fingerprint in `code-review/v1`.
