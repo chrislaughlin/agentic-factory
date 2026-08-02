@@ -74,13 +74,64 @@ export const StageDefinitionSchema = z.object({
 });
 export type StageDefinition = z.infer<typeof StageDefinitionSchema>;
 
-export const WorkflowDefinitionSchema = z.object({
-  apiVersion: z.literal(API_VERSION),
-  kind: z.literal("Workflow"),
-  metadata: z.object({ id: Id, version: z.string() }),
-  policy: PolicyDefinitionSchema.default({}),
-  stages: z.array(StageDefinitionSchema).min(1),
-});
+export const WorkflowDefinitionSchema = z
+  .object({
+    apiVersion: z.literal(API_VERSION),
+    kind: z.literal("Workflow"),
+    metadata: z.object({ id: Id, version: z.string() }),
+    policy: PolicyDefinitionSchema.default({}),
+    stages: z.array(StageDefinitionSchema).min(1),
+  })
+  .superRefine((workflow, context) => {
+    const stageIndexes = new Map<string, number>();
+    for (const [index, stage] of workflow.stages.entries()) {
+      const existingIndex = stageIndexes.get(stage.id);
+      if (existingIndex !== undefined) {
+        context.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: `Duplicate stage id ${stage.id} (first declared at stages.${existingIndex})`,
+          path: ["stages", index, "id"],
+        });
+      } else {
+        stageIndexes.set(stage.id, index);
+      }
+    }
+
+    for (const [index, stage] of workflow.stages.entries()) {
+      for (const [dependencyIndex, dependency] of stage.dependsOn.entries()) {
+        if (!stageIndexes.has(dependency)) {
+          context.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: `Unknown stage dependency ${dependency}`,
+            path: ["stages", index, "dependsOn", dependencyIndex],
+          });
+        }
+      }
+    }
+
+    const visiting = new Set<string>();
+    const visited = new Set<string>();
+    const visit = (stageId: string, path: string[]): void => {
+      if (visiting.has(stageId)) {
+        const cycleStart = path.indexOf(stageId);
+        context.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: `Cyclic stage dependency: ${[...path.slice(cycleStart), stageId].join(" -> ")}`,
+          path: ["stages", stageIndexes.get(stageId) ?? 0, "dependsOn"],
+        });
+        return;
+      }
+      if (visited.has(stageId)) return;
+      visiting.add(stageId);
+      const stage = workflow.stages[stageIndexes.get(stageId)!];
+      for (const dependency of stage?.dependsOn ?? []) {
+        if (stageIndexes.has(dependency)) visit(dependency, [...path, stageId]);
+      }
+      visiting.delete(stageId);
+      visited.add(stageId);
+    };
+    for (const stageId of stageIndexes.keys()) visit(stageId, []);
+  });
 export type WorkflowDefinition = z.infer<typeof WorkflowDefinitionSchema>;
 
 export const ArtifactDefinitionSchema = z.object({
@@ -172,12 +223,7 @@ export const HarnessCapabilitiesSchema = z.object({
 export type HarnessCapabilities = z.infer<typeof HarnessCapabilitiesSchema>;
 
 export type StageStatus =
-  | "pending"
-  | "running"
-  | "waiting-approval"
-  | "completed"
-  | "failed"
-  | "invalidated";
+  "pending" | "running" | "waiting-approval" | "completed" | "failed" | "invalidated";
 export interface StageRun {
   id: string;
   stageId: string;

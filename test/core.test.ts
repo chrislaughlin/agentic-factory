@@ -137,6 +137,33 @@ describe("validated canonical definitions and protocols", () => {
     expect(() => AgentDefinitionSchema.parse({ kind: "Agent" })).toThrow();
     expect(() => AgentEventSchema.parse({ type: "made.up" })).toThrow();
   });
+  it("rejects duplicate, missing, and cyclic workflow dependencies", () => {
+    const definition = (stages: unknown[]) => ({
+      apiVersion: "agent-factory.dev/v1alpha1",
+      kind: "Workflow",
+      metadata: { id: "invalid-graph", version: "1" },
+      stages,
+    });
+    const stage = (id: string, dependsOn: string[] = []) => ({
+      id,
+      kind: "agent",
+      agentId: "planner",
+      outputArtifact: "implementation-plan",
+      dependsOn,
+    });
+
+    expect(() =>
+      WorkflowDefinitionSchema.parse(definition([stage("planning"), stage("planning")])),
+    ).toThrow(/Duplicate stage id planning/);
+    expect(() =>
+      WorkflowDefinitionSchema.parse(definition([stage("planning", ["missing"])])),
+    ).toThrow(/Unknown stage dependency missing/);
+    expect(() =>
+      WorkflowDefinitionSchema.parse(
+        definition([stage("planning", ["review"]), stage("review", ["planning"])]),
+      ),
+    ).toThrow(/Cyclic stage dependency/);
+  });
   it("validates typed artifact content", () => {
     expect(
       validateArtifactContent("test-report", { revision: "r", passed: true, tests: 2 }),
