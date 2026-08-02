@@ -1,0 +1,52 @@
+apiVersion: agent-factory.dev/v1alpha1
+kind: Workflow
+metadata: { id: local-sdlc, version: 1.0.0 }
+policy: { maximumAttemptsPerStage: 3, maximumTotalRemediationAttempts: 8 }
+stages:
+  - {
+      id: planning,
+      kind: agent,
+      agentId: planner,
+      outputArtifact: implementation-plan,
+      requiredHarnessCapabilities: [skills, structuredOutput],
+    }
+  - {
+      id: plan-approval,
+      kind: approval,
+      dependsOn: [planning],
+      inputArtifacts: [implementation-plan],
+      outputArtifact: approval,
+    }
+  - {
+      id: construction,
+      kind: agent,
+      agentId: constructor,
+      dependsOn: [plan-approval],
+      inputArtifacts: [implementation-plan, remediation-request],
+      outputArtifact: source-change,
+      requiredHarnessCapabilities: [skills, structuredOutput],
+    }
+  - {
+      id: test,
+      kind: agent,
+      agentId: tester,
+      dependsOn: [construction],
+      inputArtifacts: [source-change],
+      outputArtifact: test-report,
+      requiredHarnessCapabilities: [structuredOutput],
+    }
+  - {
+      id: code-review,
+      kind: agent,
+      agentId: code-reviewer,
+      dependsOn: [test],
+      inputArtifacts: [source-change, test-report],
+      outputArtifact: code-review,
+      requiredHarnessCapabilities: [structuredOutput],
+    }
+  - {
+      id: quality-gate,
+      kind: quality-gate,
+      dependsOn: [code-review],
+      inputArtifacts: [test-report, code-review],
+    }

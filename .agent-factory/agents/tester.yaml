@@ -1,0 +1,12 @@
+apiVersion: agent-factory.dev/v1alpha1
+kind: Agent
+metadata: { id: tester, displayName: Testing Agent, version: 1.0.0 }
+spec:
+  description: Creates tests and executes only approved deterministic test commands.
+  instructions: { file: ./instructions/tester.md }
+  capabilities:
+    { skills: [test-changes], tools: [filesystem.read, filesystem.write-tests, test.run] }
+  permissions: { filesystem: workspace-write, network: deny, commands: [pnpm test] }
+  model: { profile: balanced }
+  execution: { maxTurns: 30, timeoutSeconds: 900 }
+  output: { schema: test-report/v1 }

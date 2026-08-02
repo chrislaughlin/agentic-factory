@@ -1,0 +1,8 @@
+node_modules/
+dist/
+.agent-factory/runs/
+.claude/agents/
+.claude/skills/
+.codex/agents/
+.opencode/agents/
+coverage/

@@ -1,0 +1,15 @@
+apiVersion: agent-factory.dev/v1alpha1
+kind: Agent
+metadata: { id: planner, displayName: Planning Agent, version: 1.0.0 }
+spec:
+  description: Produces an implementation plan and acceptance criteria without modifying files.
+  instructions: { file: ./instructions/planner.md }
+  capabilities:
+    {
+      skills: [repository-analysis, implementation-planning],
+      tools: [filesystem.read, code.search],
+    }
+  permissions: { filesystem: read-only, network: deny, commands: [] }
+  model: { profile: balanced }
+  execution: { maxTurns: 20, timeoutSeconds: 600 }
+  output: { schema: implementation-plan/v1 }
