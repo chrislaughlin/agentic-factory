@@ -1,5 +1,7 @@
 # Change monitoring contract
 
+Inputs include the delegated [worktree identity](../../do-work/references/worktree.md). Validate it while polling; if a human removed the worktree before resumption, validate the recorded task branch and remote head instead.
+
 ## Classification
 
 - `pass`: required CI is green and no unresolved requested changes exist for the observed head.

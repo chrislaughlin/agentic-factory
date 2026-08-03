@@ -31,6 +31,8 @@ flowchart LR
 
 `do-work` always remains the orchestrator. Specialists cannot spawn agents or inherit the lifecycle. Production code has one writer (`construct-work`); security, QA, code-quality review, and remote monitoring are read-only; `author-tests` may change only tests and fixtures.
 
+After plan approval, each work item receives a dedicated task branch and sibling Git worktree created from the recorded baseline. Construction, tests, runtime QA, review, publication, and remediation use that worktree; the checkout where the human invoked `do-work` remains untouched. The journal lives in the Git common directory and records the absolute worktree path for safe resumption. Agent Factory retains the worktree at handoff so the human can inspect it and remove it after review or merge.
+
 ## Included skills
 
 | Skill | Role |
@@ -86,12 +88,13 @@ The skill inspects the repository and creates `.agent-factory/project.md`, the c
 - PR/MR conventions and required local/CI checks;
 - CI polling interval and timeout, defaulting to 60 seconds and 60 minutes.
 
-It also creates `.agent-factory/.gitignore` containing `work/`. Work journals stay local at `.agent-factory/work/<task-key>.md`; `project.md` remains committable.
+Work journals stay local under Git's shared private metadata at `<git-common-directory>/agent-factory/work/<task-key>.md`; `project.md` remains committable. No Agent Factory-specific ignore file is required.
 
 ## Operating rules
 
 - Planning asks one material human decision at a time and recommends an answer. Repository facts are discovered, not asked.
 - No code changes begin until the human explicitly approves a decision-complete plan.
+- Every approved work item runs in its own Git worktree; unrelated changes in the invoking checkout are neither stashed nor copied into it.
 - Oversized requests are sliced and wait for the human to select a slice.
 - Construction and test changes become separate Git checkpoint commits. Security reviews the immutable construction SHA while tests run in parallel.
 - QA requires runtime evidence for observable behavior. Missing required runtime access is blocked, not waived.

@@ -29,6 +29,21 @@ class StaticContractTests(unittest.TestCase):
         self.assertIn("Permit three full remediation cycles", do_work)
         self.assertIn("Never merge or deploy", workflow)
 
+    def test_each_work_item_uses_an_isolated_git_worktree(self):
+        do_work = (ROOT / ".agents/skills/do-work/SKILL.md").read_text()
+        workflow = (ROOT / ".agents/skills/do-work/references/workflow.md").read_text()
+        identity = (ROOT / ".agents/skills/do-work/references/worktree.md").read_text()
+        journal = (ROOT / ".agents/skills/do-work/references/journal.md").read_text()
+        construction = (ROOT / ".agents/skills/construct-work/references/contract.md").read_text()
+        tests = (ROOT / ".agents/skills/author-tests/references/contract.md").read_text()
+        self.assertIn("git worktree add", do_work)
+        self.assertIn("outside every existing worktree", workflow)
+        self.assertIn("Every approved work item has one identity", identity)
+        self.assertIn("<absolute-git-common-directory>/agent-factory/work", journal)
+        self.assertIn("Worktree: <absolute path>", journal)
+        self.assertIn("delegated worktree", construction)
+        self.assertIn("delegated worktree", tests)
+
     def test_specialist_boundaries_are_explicit(self):
         construction = (ROOT / ".agents/skills/construct-work/references/contract.md").read_text()
         tests = (ROOT / ".agents/skills/author-tests/references/contract.md").read_text()
@@ -51,6 +66,11 @@ class StaticContractTests(unittest.TestCase):
         self.assertFalse(scenarios["qa_runtime_unavailable"]["publish"])
         self.assertFalse(scenarios["validated_quality_finding"]["publish"])
         self.assertEqual(scenarios["third_failed_cycle"]["attempt"], 3)
+        self.assertTrue(scenarios["worktree_isolation"]["required"])
+        self.assertEqual(
+            scenarios["worktree_isolation"]["writable_stages"],
+            ["construction", "author-tests", "remediation"],
+        )
         self.assertEqual(scenarios["human_boundary"]["agent_must_not"], ["merge", "deploy"])
 
 

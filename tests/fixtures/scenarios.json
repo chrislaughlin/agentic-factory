@@ -10,6 +10,11 @@
   "qa_runtime_unavailable": { "qa_status": "blocked", "publish": false },
   "validated_quality_finding": { "review_status": "fail", "next_stage": "construction", "publish": false },
   "third_failed_cycle": { "attempt": 3, "next_stage": "human-decision", "publish": false },
-  "resume": { "validate": ["repository", "branch", "head", "recorded revisions"] },
+  "resume": { "validate": ["repository", "worktree", "branch", "head", "recorded revisions"] },
+  "worktree_isolation": {
+    "required": true,
+    "writable_stages": ["construction", "author-tests", "remediation"],
+    "primary_checkout_writes": false
+  },
   "human_boundary": { "agent_may": ["create ready PR/MR", "monitor CI and reviews"], "agent_must_not": ["merge", "deploy"] }
 }

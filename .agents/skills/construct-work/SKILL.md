@@ -5,7 +5,7 @@ description: Implement an explicitly approved software plan or a bounded remedia
 
 # Construct Work
 
-Read [contract.md](references/contract.md). Inspect repository instructions, architecture, standards, relevant code, tests, and the baseline before editing.
+Read [contract.md](references/contract.md). Validate and enter the delegated worktree before inspecting repository instructions, architecture, standards, relevant code, tests, and the baseline.
 
 Implement only the approved plan or supplied remediation findings. Do not change scope, weaken acceptance criteria, waive findings, publish a PR/MR, or spawn agents. Ask the parent orchestrator when authority or requirements are missing.
 

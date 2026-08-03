@@ -5,7 +5,7 @@ description: Create or update focused automated tests and fixtures for an immuta
 
 # Author Tests
 
-Read [contract.md](references/contract.md). Inspect the approved plan, acceptance criteria, construction revision, existing test conventions, and `.agent-factory/project.md`.
+Read [contract.md](references/contract.md). Validate and enter the delegated worktree, then inspect the approved plan, acceptance criteria, construction revision, existing test conventions, and `.agent-factory/project.md`.
 
 Add or update only tests and fixtures. Cover observable behavior, regressions, boundaries, failures, and acceptance criteria at the narrowest useful seams. Do not weaken assertions merely to make tests pass.
 

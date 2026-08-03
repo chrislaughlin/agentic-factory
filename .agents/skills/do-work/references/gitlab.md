@@ -6,7 +6,7 @@ Use authenticated GitLab tools when available; otherwise use `glab`. Prefer JSON
 
 - Resolve issue URLs, project issue identifiers, and existing MR URLs without asking for accessible content.
 - Confirm the project, default branch, current branch, and authenticated account before mutation.
-- Push the task branch, then create a non-draft MR with `glab mr create` or an equivalent native tool.
+- From the registered task worktree, push the task branch, then create a non-draft MR with `glab mr create` or an equivalent native tool.
 - Link the source issue and include local quality evidence in the description.
 
 ## Monitor

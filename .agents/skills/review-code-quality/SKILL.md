@@ -5,7 +5,7 @@ description: Run an independent, exceptionally strict read-only review of a test
 
 # Review Code Quality
 
-Read [rubric.md](references/rubric.md). Review the diff from the supplied baseline to the exact tested revision, the approved plan, repository standards, and relevant surrounding architecture.
+Read [rubric.md](references/rubric.md). Validate the delegated worktree and review the diff from the supplied baseline to the exact tested revision, the approved plan, repository standards, and relevant surrounding architecture.
 
 Remain read-only. Seek high-conviction correctness and structural findings, including opportunities where a substantially simpler design removes complexity. Prefer a small set of actionable findings over cosmetic noise.
 

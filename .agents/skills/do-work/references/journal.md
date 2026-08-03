@@ -1,6 +1,6 @@
 # Work journal
 
-Store each run at `.agent-factory/work/<task-key>.md`. Use a stable key from the ticket or a short slug. The directory must be ignored by Git.
+Store each run at `<absolute-git-common-directory>/agent-factory/work/<task-key>.md`, using the common directory from the [worktree identity](worktree.md). Use a stable key from the ticket or a short slug. Git's private metadata keeps journals local and makes them accessible from every linked worktree without modifying the user's control checkout.
 
 ## Required headings
 
@@ -10,6 +10,8 @@ Store each run at `.agent-factory/work/<task-key>.md`. Use a stable key from the
 ## Identity
 - Source: <reference>
 - Forge: github | gitlab
+- Git common directory: <absolute path>
+- Worktree: <absolute path>
 - Branch: <branch>
 - Baseline: <sha>
 - PR/MR: <url or pending>
@@ -41,4 +43,4 @@ Store each run at `.agent-factory/work/<task-key>.md`. Use a stable key from the
 Use $do-work <original-reference-or-pr-url> and validate branch/revisions before continuing.
 ```
 
-Append evidence; do not erase failed attempts. Update the state summary atomically after a stage finishes. Before resuming, verify the current repository, branch, PR/MR head, and recorded SHAs. If they diverge, mark prior downstream evidence stale and return to the earliest affected stage.
+Append evidence; do not erase failed attempts. Update the state summary atomically after a stage finishes. Before resuming, verify the Git common directory, registered worktree path, branch, PR/MR head, and recorded SHAs. If a human removed the worktree, recreate it from the validated recorded branch. If state diverges, mark prior downstream evidence stale and return to the earliest affected stage.

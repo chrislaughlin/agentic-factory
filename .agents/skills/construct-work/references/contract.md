@@ -4,12 +4,14 @@
 
 - Approved plan and acceptance criteria.
 - Baseline or previous tested revision.
+- Delegated [worktree identity](../../do-work/references/worktree.md) and expected revision.
 - Allowed paths/scope and repository project contract.
 - Optional remediation findings copied without dilution.
 
 ## Rules
 
 - Production code has one writer: this role.
+- Run every repository command and make every change inside the delegated worktree. Verify its Git common directory, branch, and expected head before editing; never write to the control checkout or another worktree.
 - Never edit tests or fixtures unless the approved plan explicitly makes them production artifacts; leave verification coverage to `author-tests`.
 - Never overwrite unrelated dirty changes, rewrite public history, use destructive Git recovery, or commit secrets.
 - Resolve every delegated finding or return it as blocked with concrete evidence. Do not silently skip it.

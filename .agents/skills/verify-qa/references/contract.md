@@ -1,5 +1,7 @@
 # QA contract
 
+Inputs include the delegated [worktree identity](../../do-work/references/worktree.md) and the tested revision as the separate expected revision. Validate both before launching the runtime or collecting evidence.
+
 ## Evidence rules
 
 - Map every approved acceptance criterion to an explicit result.

@@ -1,5 +1,7 @@
 # Security review contract
 
+Inputs include the delegated [worktree identity](../../do-work/references/worktree.md) and the pinned construction revision as the separate expected revision. Inspect tracked content with commit-addressed Git commands so concurrent test changes cannot alter the review target.
+
 Review changed and newly reachable attack surfaces for:
 
 - authentication, authorization, tenant and ownership isolation;

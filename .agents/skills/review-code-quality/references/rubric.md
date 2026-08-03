@@ -1,5 +1,7 @@
 # Strict code-quality rubric
 
+Inputs include the delegated [worktree identity](../../do-work/references/worktree.md) and the exact tested revision as the separate expected revision. Keep the review source-read-only.
+
 ## Approval bar
 
 Require all of the following:

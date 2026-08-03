@@ -5,7 +5,7 @@ description: Monitor an existing GitHub pull request or GitLab merge request for
 
 # Watch Change
 
-Read [contract.md](references/contract.md) and the configured forge reference under the `do-work` skill. Validate the PR/MR URL, expected head SHA, project, and journal before polling.
+Read [contract.md](references/contract.md) and the configured forge reference under the `do-work` skill. Validate the PR/MR URL, expected head SHA, project, journal, and recorded task worktree before polling.
 
 Remain read-only. Poll at the configured interval until all required CI reaches a terminal state, actionable requested changes appear, the head changes unexpectedly, or the timeout expires. Default to 60 seconds and 60 minutes.
 

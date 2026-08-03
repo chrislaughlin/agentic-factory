@@ -6,7 +6,7 @@ Use authenticated GitHub tools when available; otherwise use `gh`. Read-only dis
 
 - Resolve issue URLs or `owner/repo#number` references without asking for content already available.
 - Confirm the remote repository, default branch, current branch, and authenticated account before mutation.
-- Push the task branch, then create a ready PR with `gh pr create` or an equivalent native tool. Do not use draft mode.
+- From the registered task worktree, push the task branch, then create a ready PR with `gh pr create` or an equivalent native tool. Do not use draft mode.
 - Link the source issue and include the local quality evidence in the body.
 
 ## Monitor
