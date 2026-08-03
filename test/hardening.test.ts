@@ -1,6 +1,8 @@
-import { mkdtemp } from "node:fs/promises";
+import { execFile } from "node:child_process";
+import { mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { resolve, join } from "node:path";
+import { promisify } from "node:util";
 import { describe, expect, it } from "vitest";
 import { ModelProfileSchema } from "../src/domain.js";
 import { GitHubLifecycle, type GitHubProvider, type GitRepositoryGateway } from "../src/github.js";
@@ -11,12 +13,18 @@ import {
   ProcessHarnessAdapter,
   UnsupportedHarnessOperationError,
 } from "../src/harness.js";
-import { DeterministicCommandRunner } from "../src/infrastructure.js";
+import {
+  DeterministicCommandRunner,
+  GitWorkspaceManager,
+  GitWorkspaceRevisionProvider,
+} from "../src/infrastructure.js";
 import { loadAgent, loadSkills, loadWorkflow } from "../src/loader.js";
 import { StructuredObservability } from "../src/observability.js";
 import { ReleaseLifecycle, type DeploymentProvider } from "../src/release.js";
 import { InMemoryRepositories } from "../src/repositories.js";
 import { WorkflowEngine } from "../src/workflow.js";
+
+const execute = promisify(execFile);
 
 describe("release hardening", () => {
   it("emits correlated structured logs and metrics without secrets", () => {
@@ -113,15 +121,42 @@ describe("release hardening", () => {
         const stage = task.stageId;
         const timestamp = new Date().toISOString();
         const remediating = task.inputs.some(value => value.type === "remediation-request");
-        const revision = stage === "construction" ? (remediating ? "revision-2" : "revision-1") : task.workspace.revision;
+        let revision = task.workspace.revision;
+        if (stage === "construction") {
+          const fs = require("node:fs");
+          const path = require("node:path");
+          const childProcess = require("node:child_process");
+          fs.mkdirSync(path.join(task.workspace.root, "src"), { recursive: true });
+          fs.writeFileSync(
+            path.join(task.workspace.root, "src/example.ts"),
+            remediating ? "export const boundary = 'handled';\\n" : "export const boundary = 'pending';\\n"
+          );
+          childProcess.execFileSync("git", ["add", "src/example.ts"], { cwd: task.workspace.root });
+          childProcess.execFileSync(
+            "git",
+            ["commit", "-m", remediating ? "remediate boundary" : "implement boundary"],
+            { cwd: task.workspace.root }
+          );
+          revision = childProcess.execFileSync("git", ["rev-parse", "HEAD"], {
+            cwd: task.workspace.root, encoding: "utf8"
+          }).trim();
+        }
         const type = stage === "planning" ? "implementation-plan"
           : stage === "construction" ? "source-change"
           : stage === "test" ? "test-report"
           : stage === "security" ? "security-review"
           : stage === "qa" ? "qa-report" : "code-review";
+        let remediatedWorkspace = false;
+        try {
+          const fs = require("node:fs");
+          const path = require("node:path");
+          remediatedWorkspace = fs.readFileSync(
+            path.join(task.workspace.root, "src/example.ts"), "utf8"
+          ).includes("handled");
+        } catch {}
         const finding = {
           id: "finding-process-edge", severity: "high", title: "Boundary condition",
-          description: "The first revision needs remediation", evidence: "revision-1 is intentional",
+          description: "The first revision needs remediation", evidence: "the initial commit is intentional",
           sourceLocation: { path: "src/example.ts", line: 1 }, revision,
           fingerprint: "process-edge", resolved: false
         };
@@ -137,7 +172,7 @@ describe("release hardening", () => {
                 ? { revision, approved: true, findings: [] }
                 : stage === "qa"
                   ? { revision, passed: true, findings: [] }
-                  : { revision, approved: revision === "revision-2", findings: revision === "revision-2" ? [] : [finding] };
+                  : { revision, approved: remediatedWorkspace, findings: remediatedWorkspace ? [] : [finding] };
         const artifact = {
           id: "artifact-" + stage + "-" + revision, type, version: "v1", producingStageId: stage,
           producer: { kind: "agent", id: task.agentId }, createdAt: timestamp, inputArtifactIds: [],
@@ -165,6 +200,24 @@ describe("release hardening", () => {
       })),
     });
     const repositories = new InMemoryRepositories();
+    const repositoryRoot = await mkdtemp(join(tmpdir(), "factory-e2e-repository-"));
+    const worktreeRoot = await mkdtemp(join(tmpdir(), "factory-e2e-worktrees-"));
+    const remoteRoot = await mkdtemp(join(tmpdir(), "factory-e2e-origin-"));
+    await execute("git", ["init", "-b", "main"], { cwd: repositoryRoot });
+    await execute("git", ["config", "user.email", "factory@example.test"], {
+      cwd: repositoryRoot,
+    });
+    await execute("git", ["config", "user.name", "Agent Factory"], { cwd: repositoryRoot });
+    await writeFile(join(repositoryRoot, "README.md"), "live end-to-end repository\n");
+    await execute("git", ["add", "README.md"], { cwd: repositoryRoot });
+    await execute("git", ["commit", "-m", "initial repository"], { cwd: repositoryRoot });
+    await execute("git", ["init", "--bare"], { cwd: remoteRoot });
+    await execute("git", ["remote", "add", "origin", remoteRoot], { cwd: repositoryRoot });
+    const workspaceManager = new GitWorkspaceManager({ repositoryRoot, worktreeRoot });
+    const workspace = await workspaceManager.prepare({
+      runId: "workflow-e2e",
+      baseBranch: "main",
+    });
     const engine = new WorkflowEngine(
       repositories,
       harness,
@@ -173,13 +226,14 @@ describe("release hardening", () => {
       new Map(skills.map((value) => [value.name, value])),
       new Map([[profile.id, profile]]),
       commands,
+      new GitWorkspaceRevisionProvider(),
     );
-    const workspace = await mkdtemp(join(tmpdir(), "factory-e2e-"));
-    const paused = await engine.submit("Complete a production release", "base-1", {
-      root: workspace,
-      branch: "agent-factory/e2e",
-      baseRevision: "base-1",
-    });
+    const paused = await engine.submit(
+      "Complete a production release",
+      workspace.baseRevision,
+      workspace,
+      "workflow-e2e",
+    );
     const planApproval = (await repositories.approvals.list(paused.id))[0]!;
     const verified = await engine.approve(planApproval.id, "planning-operator");
     expect(verified).toMatchObject({ status: "locally-verified", remediationAttempts: 1 });
@@ -190,16 +244,22 @@ describe("release hardening", () => {
         defaultBranch: "main",
         remote: "origin",
       }),
-      pushSafely: async () => {},
+      pushSafely: async (input) => {
+        const { stdout } = await execute("git", ["rev-parse", input.branch], { cwd: input.root });
+        expect(stdout.trim()).toBe(input.headRevision);
+        await execute("git", ["push", "--set-upstream", input.remote, input.branch], {
+          cwd: input.root,
+        });
+      },
     };
     const github: GitHubProvider = {
       ensurePullRequest: async () => ({
         number: 42,
         url: "https://github.com/example/project/pull/42",
-        branch: "agent-factory/e2e",
+        branch: workspace.branch,
         baseBranch: "main",
-        baseRevision: "base-1",
-        headRevision: "revision-2",
+        baseRevision: workspace.baseRevision,
+        headRevision: verified.revision,
         state: "open",
       }),
       pollPullRequest: async () => ({
@@ -208,7 +268,7 @@ describe("release hardening", () => {
           {
             key: "e2e-check",
             kind: "check",
-            revision: "revision-2",
+            revision: verified.revision,
             name: "validate",
             conclusion: "success",
             url: "https://github.com/example/project/actions/runs/1",
@@ -217,7 +277,7 @@ describe("release hardening", () => {
           {
             key: "e2e-review",
             kind: "review",
-            revision: "revision-2",
+            revision: verified.revision,
             reviewKind: "approval",
             body: "Approved",
             author: "reviewer",
@@ -249,14 +309,16 @@ describe("release hardening", () => {
         deployment: {
           id: "deployment-e2e",
           environment: "production",
-          revision: "merge-revision-2",
+          revision: `merge-${verified.revision}`,
           state: "succeeded",
           logs: ["healthy"],
         },
       }),
     };
     const release = new ReleaseLifecycle(repositories, github, deployment, commands);
-    const evidence = (await repositories.artifacts.list(verified.id)).map((value) => value.id);
+    const evidence = (await repositories.artifacts.list(verified.id))
+      .filter((value) => value.validation.valid && value.sourceRevision === verified.revision)
+      .map((value) => value.id);
     const finalApproval = await release.requestFinalApproval(verified.id, evidence);
     await release.approveAndDeploy(finalApproval.id, "release-operator", {
       repository: "example/project",
@@ -283,5 +345,6 @@ describe("release hardening", () => {
         "post-deployment-verification",
       ]),
     );
+    await workspaceManager.cleanup(verified.id);
   });
 });

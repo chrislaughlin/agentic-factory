@@ -1,5 +1,5 @@
 import { execFile } from "node:child_process";
-import { mkdtemp, readFile, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
@@ -302,6 +302,35 @@ describe("real local SDLC", () => {
       branch: "agent-factory/workflow-456",
     });
     await manager.cleanup("workflow-456");
+  });
+
+  it("removes a partially prepared worktree and releases its lock", async () => {
+    const root = await mkdtemp(join(tmpdir(), "factory-failed-repo-"));
+    const worktrees = await mkdtemp(join(tmpdir(), "factory-failed-worktrees-"));
+    await execute("git", ["init", "-b", "main"], { cwd: root });
+    await execute("git", ["config", "user.email", "factory@example.test"], { cwd: root });
+    await execute("git", ["config", "user.name", "Agent Factory"], { cwd: root });
+    await mkdir(join(root, "node_modules"));
+    await writeFile(join(root, "node_modules", "tracked.txt"), "forces symlink failure\n");
+    await execute("git", ["add", "node_modules/tracked.txt"], { cwd: root });
+    await execute("git", ["commit", "-m", "tracked dependency directory"], { cwd: root });
+    const manager = new GitWorkspaceManager({ repositoryRoot: root, worktreeRoot: worktrees });
+
+    await expect(
+      manager.prepare({ runId: "workflow-broken", baseBranch: "main" }),
+    ).rejects.toThrow();
+    await expect(
+      execute("git", ["show-ref", "--verify", "refs/heads/agent-factory/workflow-broken"], {
+        cwd: root,
+      }),
+    ).rejects.toThrow();
+
+    await execute("git", ["rm", "-r", "node_modules"], { cwd: root });
+    await execute("git", ["commit", "-m", "remove tracked dependency directory"], { cwd: root });
+    await expect(
+      manager.prepare({ runId: "workflow-recovered", baseBranch: "main" }),
+    ).resolves.toMatchObject({ branch: "agent-factory/workflow-recovered" });
+    await manager.cleanup("workflow-recovered");
   });
 
   it("reaches locally verified through deterministic gates, concurrent review, and remediation", async () => {

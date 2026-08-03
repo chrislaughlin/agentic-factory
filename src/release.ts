@@ -1,9 +1,15 @@
 import { randomUUID } from "node:crypto";
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
+import { z } from "zod";
 import { validateArtifactContent } from "./artifacts.js";
-import type { ApprovalRequest, ArtifactInstance, WorkflowRun } from "./domain.js";
-import type { GitHubProvider } from "./github.js";
+import {
+  isTerminalWorkflowStatus,
+  type ApprovalRequest,
+  type ArtifactInstance,
+  type WorkflowRun,
+} from "./domain.js";
+import { MergeResultSchema, type GitHubProvider } from "./github.js";
 import type { CommandEvidence, DeterministicCommandRunner } from "./infrastructure.js";
 import type { FactoryRepositories } from "./repositories.js";
 
@@ -14,6 +20,27 @@ export interface DeploymentSnapshot {
   state: "pending" | "running" | "succeeded" | "failed" | "rolled-back";
   logs: string[];
 }
+
+const DeploymentSnapshotSchema = z.object({
+  id: z.string().min(1),
+  environment: z.string().min(1),
+  revision: z.string().min(1),
+  state: z.enum(["pending", "running", "succeeded", "failed", "rolled-back"]),
+  logs: z.array(z.string()),
+});
+
+const DeploymentObservationSchema = z.object({
+  cursor: z.string(),
+  deployment: DeploymentSnapshotSchema,
+});
+
+const DeployCommandOutputSchema = z.object({
+  revision: z.string().min(1),
+  deploymentId: z
+    .string()
+    .regex(/^[a-zA-Z0-9._-]+$/u)
+    .optional(),
+});
 
 export interface DeploymentProvider {
   start(input: {
@@ -53,8 +80,53 @@ export class ReleaseLifecycle {
     evidenceArtifactIds: string[],
   ): Promise<ApprovalRequest> {
     const run = await this.requireRun(workflowRunId);
-    if (!new Set(["locally-verified", "waiting-review"]).has(run.status))
+    if (run.status !== "waiting-review")
       throw new Error(`Workflow ${run.id} has not passed local, CI, and review gates`);
+    const artifacts = await this.repositories.artifacts.list(run.id);
+    const supplied = evidenceArtifactIds.map((id) => {
+      const candidate = artifacts.find((artifact) => artifact.id === id);
+      if (!candidate) throw new Error(`Final approval evidence does not exist: ${id}`);
+      if (!candidate.validation.valid) throw new Error(`Final approval evidence is invalid: ${id}`);
+      return candidate;
+    });
+    const pullRequests = artifacts.filter(
+      (artifact) =>
+        artifact.type === "pull-request" &&
+        artifact.validation.valid &&
+        (artifact.content as { headRevision?: string }).headRevision === run.revision,
+    );
+    const currentCi = currentArtifacts(artifacts, "ci-result", run.revision);
+    const currentReviews = currentArtifacts(artifacts, "review-feedback", run.revision);
+    const approved = currentReviews.some(
+      (artifact) => (artifact.content as { reviewKind?: string }).reviewKind === "approval",
+    );
+    const blocked = currentReviews.some((artifact) => {
+      const content = artifact.content as {
+        reviewKind?: string;
+        resolved?: boolean;
+        classification?: string;
+      };
+      return (
+        content.classification === "actionable" ||
+        content.classification === "reasoning-required" ||
+        (!content.resolved &&
+          (content.reviewKind === "changes-requested" || content.reviewKind === "inline-thread"))
+      );
+    });
+    if (
+      pullRequests.length === 0 ||
+      currentCi.length === 0 ||
+      !currentCi.every((artifact) => (artifact.content as { passed?: boolean }).passed) ||
+      !approved ||
+      blocked
+    )
+      throw new Error(`Workflow ${run.id} has not passed local, CI, and review gates`);
+    const suppliedIds = new Set(supplied.map((artifact) => artifact.id));
+    const missingEvidence = [...pullRequests, ...currentCi, ...currentReviews]
+      .filter((artifact) => !suppliedIds.has(artifact.id))
+      .map((artifact) => artifact.id);
+    if (missingEvidence.length)
+      throw new Error(`Final approval is missing gate evidence: ${missingEvidence.join(", ")}`);
     const approval: ApprovalRequest = {
       id: `approval-${randomUUID()}`,
       workflowRunId: run.id,
@@ -92,14 +164,18 @@ export class ReleaseLifecycle {
     });
     run.status = "merging";
     await this.repositories.workflowRuns.save(run);
-    let merge: Awaited<ReturnType<GitHubProvider["mergePullRequest"]>>;
+    let merge: z.infer<typeof MergeResultSchema>;
     try {
-      merge = await this.github.mergePullRequest({
-        repository: options.repository,
-        number: options.pullRequestNumber,
-        expectedHeadRevision: approval.revision,
-        method: options.mergeMethod,
-      });
+      merge = MergeResultSchema.parse(
+        await this.github.mergePullRequest({
+          repository: options.repository,
+          number: options.pullRequestNumber,
+          expectedHeadRevision: approval.revision,
+          method: options.mergeMethod,
+        }),
+      );
+      if (merge.method !== options.mergeMethod)
+        throw new Error(`Merge provider used ${merge.method}, expected ${options.mergeMethod}`);
     } catch (error) {
       run.status = "escalated";
       run.escalationReason = `Merge failed safely: ${error instanceof Error ? error.message : String(error)}`;
@@ -121,11 +197,21 @@ export class ReleaseLifecycle {
     run.revision = merge.mergeRevision;
     run.status = "deploying";
     await this.repositories.workflowRuns.save(run);
-    const deployment = await this.deployments.start({
-      workflowRunId: run.id,
-      revision: merge.mergeRevision,
-      environment: options.environment,
-    });
+    let deployment: DeploymentSnapshot;
+    try {
+      deployment = DeploymentSnapshotSchema.parse(
+        await this.deployments.start({
+          workflowRunId: run.id,
+          revision: merge.mergeRevision,
+          environment: options.environment,
+        }),
+      );
+    } catch (error) {
+      run.status = "escalated";
+      run.escalationReason = `Deployment failed to start safely: ${error instanceof Error ? error.message : String(error)}`;
+      await this.repositories.workflowRuns.save(run);
+      return run;
+    }
     if (deployment.revision !== merge.mergeRevision) {
       run.status = "escalated";
       run.escalationReason = `Deployment revision ${deployment.revision} does not match merge ${merge.mergeRevision}`;
@@ -138,7 +224,7 @@ export class ReleaseLifecycle {
 
   async observe(workflowRunId: string): Promise<WorkflowRun> {
     const run = await this.requireRun(workflowRunId);
-    if (isTerminal(run.status)) return run;
+    if (isTerminalWorkflowStatus(run.status)) return run;
     const deploymentArtifact = (await this.repositories.artifacts.list(run.id))
       .filter((candidate) => candidate.type === "deployment-result" && candidate.validation.valid)
       .at(-1);
@@ -148,7 +234,17 @@ export class ReleaseLifecycle {
     };
     const scope = `deployment:${persisted.id}`;
     const cursor = await this.repositories.integrationCursors.get(scope);
-    const observation = await this.deployments.observe(persisted.id, cursor?.cursor);
+    let observation: z.infer<typeof DeploymentObservationSchema>;
+    try {
+      observation = DeploymentObservationSchema.parse(
+        await this.deployments.observe(persisted.id, cursor?.cursor),
+      );
+    } catch (error) {
+      run.status = "escalated";
+      run.escalationReason = `Deployment observation failed safely: ${error instanceof Error ? error.message : String(error)}`;
+      await this.repositories.workflowRuns.save(run);
+      return run;
+    }
     await this.repositories.integrationCursors.save({
       scope,
       cursor: observation.cursor,
@@ -172,13 +268,28 @@ export class ReleaseLifecycle {
     run.status = "verifying";
     await this.repositories.workflowRuns.save(run);
     const evidence: CommandEvidence[] = [];
-    for (const commandId of persisted.smokeCommandIds) {
-      evidence.push(
-        await this.commands.run(commandId, {
-          cwd: run.workspace?.root ?? ".",
-          revision: run.revision,
-        }),
-      );
+    try {
+      for (const commandId of persisted.smokeCommandIds) {
+        evidence.push(
+          await this.commands.run(commandId, {
+            cwd: run.workspace?.root ?? ".",
+            revision: run.revision,
+            environment: {
+              AGENT_FACTORY_REVISION: run.revision,
+              AGENT_FACTORY_DEPLOYMENT_ID: deployment.id,
+              AGENT_FACTORY_ENVIRONMENT: deployment.environment,
+            },
+          }),
+        );
+      }
+    } catch (error) {
+      return this.rollbackOrEscalate(run, {
+        ...deployment,
+        logs: [
+          ...deployment.logs,
+          `Smoke verification failed to execute: ${error instanceof Error ? error.message : String(error)}`,
+        ],
+      });
     }
     const passed = evidence.every((command) => command.passed);
     await this.repositories.artifacts.save(
@@ -206,7 +317,17 @@ export class ReleaseLifecycle {
       await this.repositories.workflowRuns.save(run);
       return run;
     }
-    const rolledBack = await this.deployments.rollback(deployment.id, deployment.revision);
+    let rolledBack: DeploymentSnapshot;
+    try {
+      rolledBack = DeploymentSnapshotSchema.parse(
+        await this.deployments.rollback(deployment.id, deployment.revision),
+      );
+    } catch (error) {
+      run.status = "escalated";
+      run.escalationReason = `Rollback failed safely for ${deployment.id}: ${error instanceof Error ? error.message : String(error)}`;
+      await this.repositories.workflowRuns.save(run);
+      return run;
+    }
     await this.repositories.artifacts.save(
       run.id,
       artifact("rollback-result", "rollback", run.revision, {
@@ -229,10 +350,13 @@ export class ReleaseLifecycle {
   ): Promise<void> {
     await this.repositories.artifacts.save(
       workflowRunId,
-      artifact(`deployment-${deployment.id}`, "deployment-result", deployment.revision, {
-        ...deployment,
-        smokeCommandIds,
-      }),
+      artifact(
+        "deployment-result",
+        "deployment",
+        deployment.revision,
+        { ...deployment, smokeCommandIds },
+        `deployment-${deployment.id}`,
+      ),
     );
   }
 
@@ -275,11 +399,32 @@ export class CommandDeploymentProvider implements DeploymentProvider {
     const evidence = await this.commands.run(this.deployCommandId, {
       cwd: this.workspaceRoot,
       revision: input.revision,
+      environment: {
+        AGENT_FACTORY_REVISION: input.revision,
+        AGENT_FACTORY_ENVIRONMENT: input.environment,
+        AGENT_FACTORY_WORKFLOW_RUN_ID: input.workflowRunId,
+      },
     });
+    let attestation: z.infer<typeof DeployCommandOutputSchema> | undefined;
+    if (evidence.passed) {
+      const lastLine = evidence.stdout
+        .split(/\r?\n/u)
+        .map((line) => line.trim())
+        .filter(Boolean)
+        .at(-1);
+      if (!lastLine) throw new Error("Deploy command did not attest the deployed revision");
+      try {
+        attestation = DeployCommandOutputSchema.parse(JSON.parse(lastLine));
+      } catch (error) {
+        throw new Error(
+          `Deploy command returned an invalid revision attestation: ${error instanceof Error ? error.message : String(error)}`,
+        );
+      }
+    }
     const snapshot: DeploymentSnapshot = {
-      id,
+      id: attestation?.deploymentId ?? id,
       environment: input.environment,
-      revision: input.revision,
+      revision: attestation?.revision ?? input.revision,
       state: evidence.passed ? "succeeded" : "failed",
       logs: [evidence.stdout, evidence.stderr].filter(Boolean),
     };
@@ -303,6 +448,11 @@ export class CommandDeploymentProvider implements DeploymentProvider {
     const evidence = await this.commands.run(this.rollbackCommandId, {
       cwd: this.workspaceRoot,
       revision,
+      environment: {
+        AGENT_FACTORY_REVISION: revision,
+        AGENT_FACTORY_DEPLOYMENT_ID: deploymentId,
+        AGENT_FACTORY_ENVIRONMENT: current.environment,
+      },
     });
     const snapshot: DeploymentSnapshot = {
       ...current,
@@ -322,9 +472,11 @@ export class CommandDeploymentProvider implements DeploymentProvider {
   }
 
   private async load(deploymentId: string): Promise<DeploymentSnapshot> {
-    if (!/^deployment-[a-zA-Z0-9-]+$/u.test(deploymentId))
+    if (!/^[a-zA-Z0-9][a-zA-Z0-9._-]*$/u.test(deploymentId))
       throw new Error(`Unsafe deployment id: ${deploymentId}`);
-    return JSON.parse(await readFile(this.path(deploymentId), "utf8")) as DeploymentSnapshot;
+    return DeploymentSnapshotSchema.parse(
+      JSON.parse(await readFile(this.path(deploymentId), "utf8")),
+    );
   }
 
   private path(deploymentId: string): string {
@@ -333,15 +485,15 @@ export class CommandDeploymentProvider implements DeploymentProvider {
 }
 
 function artifact(
-  idOrType: string,
+  type: string,
   producerId: string,
   revision: string,
   content: unknown,
+  id = `artifact-${type}-${randomUUID()}`,
 ): ArtifactInstance {
-  const type = idOrType.startsWith("deployment-") ? "deployment-result" : idOrType;
   validateArtifactContent(type, content);
   return {
-    id: idOrType.startsWith("deployment-") ? idOrType : `artifact-${idOrType}-${randomUUID()}`,
+    id,
     type,
     version: "v1",
     producingStageId: producerId,
@@ -354,6 +506,13 @@ function artifact(
   };
 }
 
-function isTerminal(status: WorkflowRun["status"]): boolean {
-  return new Set(["completed", "rolled-back", "failed", "escalated", "cancelled"]).has(status);
+function currentArtifacts(
+  artifacts: ArtifactInstance[],
+  type: string,
+  revision: string,
+): ArtifactInstance[] {
+  return artifacts.filter(
+    (artifact) =>
+      artifact.type === type && artifact.validation.valid && artifact.sourceRevision === revision,
+  );
 }

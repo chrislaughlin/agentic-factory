@@ -96,7 +96,6 @@ export class ScriptedHarnessAdapter implements HarnessAdapter {
 export interface ProcessHarnessCommand {
   executable: string;
   arguments?: string[];
-  cwd?: string;
   timeoutMilliseconds?: number;
 }
 
@@ -125,7 +124,7 @@ export class ProcessHarnessAdapter implements HarnessAdapter {
 
   async *run(input: HarnessRunInput): AsyncIterable<AgentEvent> {
     const child = spawn(this.command.executable, this.command.arguments ?? [], {
-      cwd: this.command.cwd,
+      cwd: input.task.workspace.root,
       env: process.env,
       stdio: ["pipe", "pipe", "pipe"],
     });

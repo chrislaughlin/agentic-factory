@@ -185,7 +185,6 @@ const invalidationTypes: Record<ChangeKind, ReadonlySet<string>> = {
     "code-review",
     "quality-gate",
     "final-report",
-    "pull-request",
     "ci-result",
     "review-feedback",
   ]),
@@ -196,7 +195,6 @@ const invalidationTypes: Record<ChangeKind, ReadonlySet<string>> = {
     "code-review",
     "quality-gate",
     "final-report",
-    "pull-request",
     "ci-result",
     "review-feedback",
   ]),
@@ -213,7 +211,6 @@ const invalidationTypes: Record<ChangeKind, ReadonlySet<string>> = {
     "review-feedback",
     "quality-gate",
     "final-report",
-    "pull-request",
   ]),
 };
 
@@ -247,7 +244,6 @@ function isRevisionBound(type: string): boolean {
     "code-review",
     "quality-gate",
     "final-report",
-    "pull-request",
     "ci-result",
     "review-feedback",
   ]).has(type);

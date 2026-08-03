@@ -269,6 +269,9 @@ export interface WorkflowRun {
   remediationAttempts: number;
   escalationReason?: string;
 }
+export function isTerminalWorkflowStatus(status: WorkflowRun["status"]): boolean {
+  return new Set(["completed", "rolled-back", "failed", "escalated", "cancelled"]).has(status);
+}
 export interface ApprovalRequest {
   id: string;
   workflowRunId: string;

@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { validateArtifactContent, invalidateArtifacts } from "./artifacts.js";
 import {
   AgentEventSchema,
+  isTerminalWorkflowStatus,
   type AgentDefinition,
   type AgentEvent,
   type AgentResult,
@@ -18,7 +19,11 @@ import {
   type WorkflowRun,
 } from "./domain.js";
 import { assertHarnessCompatibility, type HarnessAdapter } from "./harness.js";
-import type { CommandEvidence, DeterministicCommandRunner } from "./infrastructure.js";
+import type {
+  CommandEvidence,
+  DeterministicCommandRunner,
+  WorkspaceRevisionProvider,
+} from "./infrastructure.js";
 import { noOpObservability, type FactoryObservability } from "./observability.js";
 import type { FactoryRepositories } from "./repositories.js";
 
@@ -66,6 +71,7 @@ export class WorkflowEngine {
     private readonly skills: Map<string, SkillDefinition>,
     private readonly profiles: Map<string, ModelProfile>,
     private readonly commandRunner?: DeterministicCommandRunner,
+    private readonly revisionProvider?: WorkspaceRevisionProvider,
     private readonly observability: FactoryObservability = noOpObservability,
   ) {}
   async submit(
@@ -190,7 +196,7 @@ export class WorkflowEngine {
       stage.status = "pending";
       await this.repositories.stageRuns.save(run.id, stage);
     }
-    if (run.status !== "waiting-approval" && !isTerminalStatus(run.status)) {
+    if (run.status !== "waiting-approval" && !isTerminalWorkflowStatus(run.status)) {
       run.status = "running";
       await this.repositories.workflowRuns.save(run);
       await this.drive(run);
@@ -386,7 +392,11 @@ export class WorkflowEngine {
         objective: run.objective,
         requiredSkills: selectedSkills.map((x) => x.name),
         optionalSkills: [],
-        workspace: { root: ".", revision: run.revision },
+        workspace: {
+          root: run.workspace?.root ?? ".",
+          ...(run.workspace?.branch ? { branch: run.workspace.branch } : {}),
+          revision: run.revision,
+        },
         inputs: inputs.map((x) => ({ artifactId: x.id, type: x.type, version: x.version })),
         expectedOutput: { type: definition.outputArtifact!, version: "v1" },
         permissions,
@@ -443,6 +453,15 @@ export class WorkflowEngine {
         result.artifact.type === "source-change"
           ? (result.artifact.content as { revision: string }).revision
           : run.revision;
+      if (result.artifact.type === "source-change" && this.revisionProvider && run.workspace) {
+        const actualRevision = await this.revisionProvider.currentRevision(run.workspace.root);
+        if (actualRevision !== sourceRevision)
+          return await this.escalate(
+            run,
+            stage,
+            `Construction reported revision ${sourceRevision}, but workspace HEAD is ${actualRevision}`,
+          );
+      }
       const artifact: ArtifactInstance = {
         ...result.artifact,
         producingStageId: stage.stageId,
@@ -713,8 +732,4 @@ export class WorkflowEngine {
   private async event(id: string, event: AgentEvent) {
     await this.repositories.events.append(id, AgentEventSchema.parse(event));
   }
-}
-
-function isTerminalStatus(status: WorkflowRun["status"]): boolean {
-  return new Set(["completed", "rolled-back", "failed", "escalated", "cancelled"]).has(status);
 }

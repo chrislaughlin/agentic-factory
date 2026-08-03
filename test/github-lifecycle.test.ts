@@ -132,4 +132,65 @@ describe("GitHub lifecycle", () => {
     ).toBe(true);
     secondRepositories.close();
   });
+
+  it("invalidates old-head evidence after a force push and stops at a terminal state", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "factory-head-change-"));
+    const repositories = new SqliteRepositories(join(directory, "factory.db"));
+    const provider = new FakeGitHubProvider();
+    const git = new FakeGitRepository();
+    await repositories.workflowRuns.save(run);
+    const lifecycle = new GitHubLifecycle(repositories, provider, git);
+    await lifecycle.publish(run.id, { title: "Change", body: "Evidence" });
+    provider.events = [
+      {
+        key: "check-success",
+        kind: "check",
+        revision: "revision-1",
+        name: "validate",
+        conclusion: "success",
+        url: "https://github.com/example/project/actions/runs/101",
+        jobs: [{ name: "validate", conclusion: "success", failedSteps: [], log: "passed" }],
+      },
+      {
+        key: "review-approved",
+        kind: "review",
+        revision: "revision-1",
+        reviewKind: "approval",
+        body: "approved",
+        author: "reviewer",
+        resolved: true,
+      },
+    ];
+    await lifecycle.poll(run.id);
+    provider.events = [
+      {
+        key: "head-revision-2",
+        kind: "head-changed",
+        previousRevision: "revision-1",
+        revision: "revision-2",
+      },
+    ];
+
+    await lifecycle.poll(run.id);
+
+    expect(await repositories.workflowRuns.get(run.id)).toMatchObject({
+      revision: "revision-2",
+      status: "running",
+    });
+    const allArtifacts = await repositories.artifacts.list(run.id);
+    const oldEvidence = allArtifacts.filter((artifact) =>
+      new Set(["ci-result", "review-feedback"]).has(artifact.type),
+    );
+    expect(oldEvidence.every((artifact) => !artifact.validation.valid)).toBe(true);
+    expect(
+      allArtifacts.find((artifact) => artifact.type === "pull-request")?.validation.valid,
+    ).toBe(true);
+    const terminal = (await repositories.workflowRuns.get(run.id))!;
+    terminal.status = "completed";
+    await repositories.workflowRuns.save(terminal);
+    const pollsBefore = provider.pollInputs.length;
+    await lifecycle.poll(run.id);
+    expect(provider.pollInputs).toHaveLength(pollsBefore);
+    repositories.close();
+  });
 });

@@ -1,7 +1,13 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
+import { z } from "zod";
 import { invalidateArtifacts, validateArtifactContent } from "./artifacts.js";
-import type { ArtifactInstance, Finding, WorkflowRun } from "./domain.js";
+import {
+  isTerminalWorkflowStatus,
+  type ArtifactInstance,
+  type Finding,
+  type WorkflowRun,
+} from "./domain.js";
 import type { FactoryRepositories } from "./repositories.js";
 
 const execute = promisify(execFile);
@@ -33,6 +39,16 @@ export interface PullRequestSnapshot {
   state: "open" | "closed" | "merged";
 }
 
+export const PullRequestSnapshotSchema = z.object({
+  number: z.number().int().positive(),
+  url: z.string().url(),
+  branch: z.string().min(1),
+  baseBranch: z.string().min(1),
+  baseRevision: z.string().min(1),
+  headRevision: z.string().min(1),
+  state: z.enum(["open", "closed", "merged"]),
+});
+
 export interface CheckJobEvidence {
   name: string;
   conclusion: string;
@@ -57,10 +73,54 @@ export type GitHubEvent =
       reviewKind: "comment" | "approval" | "changes-requested" | "inline-thread";
       body: string;
       author: string;
-      threadId?: string;
+      threadId?: string | undefined;
       resolved: boolean;
     }
   | { key: string; kind: "head-changed"; previousRevision: string; revision: string };
+
+const CheckJobEvidenceSchema = z.object({
+  name: z.string(),
+  conclusion: z.string(),
+  failedSteps: z.array(z.string()),
+  log: z.string(),
+});
+export const GitHubEventSchema = z.discriminatedUnion("kind", [
+  z.object({
+    key: z.string(),
+    kind: z.literal("check"),
+    revision: z.string(),
+    name: z.string(),
+    conclusion: z.string(),
+    url: z.string().url(),
+    jobs: z.array(CheckJobEvidenceSchema),
+  }),
+  z.object({
+    key: z.string(),
+    kind: z.literal("review"),
+    revision: z.string(),
+    reviewKind: z.enum(["comment", "approval", "changes-requested", "inline-thread"]),
+    body: z.string(),
+    author: z.string(),
+    threadId: z.string().optional(),
+    resolved: z.boolean(),
+  }),
+  z.object({
+    key: z.string(),
+    kind: z.literal("head-changed"),
+    previousRevision: z.string(),
+    revision: z.string(),
+  }),
+]);
+const GitHubPollResultSchema = z.object({
+  cursor: z.string(),
+  events: z.array(GitHubEventSchema),
+});
+export const MergeResultSchema = z.object({
+  mergeRevision: z.string().min(1),
+  actor: z.string().min(1),
+  mergedAt: z.string().datetime(),
+  method: z.enum(["merge", "squash", "rebase"]),
+});
 
 export interface EnsurePullRequestInput {
   repository: string;
@@ -85,7 +145,7 @@ export interface GitHubProvider {
     number: number;
     expectedHeadRevision: string;
     method: "merge" | "squash" | "rebase";
-  }): Promise<{ mergeRevision: string; actor: string; mergedAt: string; method: string }>;
+  }): Promise<z.infer<typeof MergeResultSchema>>;
 }
 
 export type FeedbackClassification =
@@ -127,16 +187,18 @@ export class GitHubLifecycle {
       .filter((artifact) => artifact.type === "pull-request" && artifact.validation.valid)
       .at(-1);
     const existingNumber = (existing?.content as { number?: number } | undefined)?.number;
-    const pullRequest = await this.provider.ensurePullRequest({
-      repository: identity.repository,
-      branch: run.workspace.branch,
-      baseBranch: identity.defaultBranch,
-      baseRevision: run.workspace.baseRevision,
-      headRevision: run.revision,
-      title: input.title,
-      body: input.body,
-      ...(existingNumber ? { existingPullRequestNumber: existingNumber } : {}),
-    });
+    const pullRequest = PullRequestSnapshotSchema.parse(
+      await this.provider.ensurePullRequest({
+        repository: identity.repository,
+        branch: run.workspace.branch,
+        baseBranch: identity.defaultBranch,
+        baseRevision: run.workspace.baseRevision,
+        headRevision: run.revision,
+        title: input.title,
+        body: input.body,
+        ...(existingNumber ? { existingPullRequestNumber: existingNumber } : {}),
+      }),
+    );
     await this.repositories.artifacts.save(
       run.id,
       artifact(`github-pr-${pullRequest.number}`, "pull-request", "github-publish", run.revision, {
@@ -156,7 +218,7 @@ export class GitHubLifecycle {
     readyForFinalApproval: boolean;
   }> {
     const run = await this.requireRun(workflowRunId);
-    if (isTerminal(run.status))
+    if (isTerminalWorkflowStatus(run.status))
       return {
         processed: 0,
         duplicates: 0,
@@ -170,13 +232,16 @@ export class GitHubLifecycle {
     const pullRequest = pullArtifact.content as { repository: string; number: number };
     const scope = `github:${pullRequest.repository}#${pullRequest.number}`;
     const savedCursor = await this.repositories.integrationCursors.get(scope);
-    const polled = await this.provider.pollPullRequest(
-      pullRequest.repository,
-      pullRequest.number,
-      savedCursor?.cursor,
+    const polled = GitHubPollResultSchema.parse(
+      await this.provider.pollPullRequest(
+        pullRequest.repository,
+        pullRequest.number,
+        savedCursor?.cursor,
+      ),
     );
     let processed = 0;
     let duplicates = 0;
+    let headChanged = false;
     const actionable: Array<{
       event: Exclude<GitHubEvent, { kind: "head-changed" }>;
       classification: FeedbackClassification;
@@ -202,7 +267,9 @@ export class GitHubLifecycle {
             invalidateArtifacts(all, "source", event.revision),
           );
           run.revision = event.revision;
+          resetLocalVerificationStages(run);
           run.status = "running";
+          headChanged = true;
         }
         continue;
       }
@@ -240,12 +307,17 @@ export class GitHubLifecycle {
         (content.reviewKind === "changes-requested" || content.reviewKind === "inline-thread")
       );
     });
+    const hasPendingTriage = currentReviews.some(
+      (artifact) =>
+        (artifact.content as { classification?: string }).classification === "reasoning-required",
+    );
     const readyForFinalApproval =
       !actionable.length &&
       currentCi.length > 0 &&
       currentCi.every((artifact) => (artifact.content as { passed?: boolean }).passed) &&
       hasApproval &&
-      !hasUnresolvedRequest;
+      !hasUnresolvedRequest &&
+      !hasPendingTriage;
     if (actionable.length) {
       const findings = actionable.map(({ event }) => feedbackFinding(event));
       await this.repositories.artifacts.save(
@@ -266,7 +338,7 @@ export class GitHubLifecycle {
       );
       resetLocalVerificationStages(run);
       run.status = "running";
-    } else if (processed || readyForFinalApproval) {
+    } else if (!headChanged && (processed || readyForFinalApproval)) {
       run.status = "waiting-review";
     }
     await this.repositories.workflowRuns.save(run);
@@ -284,6 +356,14 @@ export class GitHubLifecycle {
     classification: FeedbackClassification,
   ): Promise<void> {
     if (event.kind === "check") {
+      await this.supersedeFeedback(
+        run.id,
+        (artifact) =>
+          artifact.type === "ci-result" &&
+          artifact.sourceRevision === event.revision &&
+          (artifact.content as { name?: string }).name === event.name,
+        event.key,
+      );
       await this.repositories.artifacts.save(
         run.id,
         artifact(`github-${safeId(event.key)}`, "ci-result", "github-monitor", event.revision, {
@@ -298,6 +378,25 @@ export class GitHubLifecycle {
         }),
       );
     } else {
+      await this.supersedeFeedback(
+        run.id,
+        (artifact) => {
+          if (artifact.type !== "review-feedback" || artifact.sourceRevision !== event.revision)
+            return false;
+          const content = artifact.content as {
+            author?: string;
+            reviewKind?: string;
+            threadId?: string;
+          };
+          if (event.threadId) return content.threadId === event.threadId;
+          return (
+            event.reviewKind === "approval" &&
+            content.author === event.author &&
+            content.reviewKind === "changes-requested"
+          );
+        },
+        event.key,
+      );
       await this.repositories.artifacts.save(
         run.id,
         artifact(
@@ -318,6 +417,31 @@ export class GitHubLifecycle {
         ),
       );
     }
+  }
+
+  private async supersedeFeedback(
+    workflowRunId: string,
+    matches: (artifact: ArtifactInstance) => boolean,
+    eventKey: string,
+  ): Promise<void> {
+    const artifacts = await this.repositories.artifacts.list(workflowRunId);
+    if (!artifacts.some((artifact) => artifact.validation.valid && matches(artifact))) return;
+    await this.repositories.artifacts.replace(
+      workflowRunId,
+      artifacts.map((artifact) =>
+        artifact.validation.valid && matches(artifact)
+          ? {
+              ...artifact,
+              validation: {
+                valid: false,
+                errors: [`superseded by GitHub event ${eventKey}`],
+              },
+              invalidatedAt: new Date().toISOString(),
+              invalidationReason: "superseded GitHub event",
+            }
+          : artifact,
+      ),
+    );
   }
 
   private async requireRun(id: string): Promise<WorkflowRun> {
@@ -399,10 +523,6 @@ function artifact(
 
 function safeId(value: string): string {
   return value.replace(/[^a-zA-Z0-9._-]/gu, "-");
-}
-
-function isTerminal(status: WorkflowRun["status"]): boolean {
-  return new Set(["completed", "rolled-back", "failed", "escalated", "cancelled"]).has(status);
 }
 
 function resetLocalVerificationStages(run: WorkflowRun): void {
@@ -531,26 +651,48 @@ export class GhCliGitHubProvider implements GitHubProvider {
     cursor?: string,
   ): Promise<{ cursor: string; events: GitHubEvent[] }> {
     void cursor;
-    const { stdout } = await execute("gh", [
-      "pr",
-      "view",
-      String(number),
-      "--repo",
-      repository,
-      "--json",
-      "headRefOid,reviews,comments,statusCheckRollup",
+    const [{ stdout }, { stdout: reviewsJson }] = await Promise.all([
+      execute("gh", [
+        "pr",
+        "view",
+        String(number),
+        "--repo",
+        repository,
+        "--json",
+        "headRefOid,comments,statusCheckRollup",
+      ]),
+      execute("gh", ["api", `repos/${repository}/pulls/${number}/reviews`]),
     ]);
-    const value = JSON.parse(stdout) as {
-      headRefOid: string;
-      reviews: Array<{ id: string; state: string; body: string; author: { login: string } }>;
-      comments: Array<{ id: string; body: string; author: { login: string } }>;
-      statusCheckRollup: Array<{
-        __typename: string;
-        name?: string;
-        conclusion?: string;
-        detailsUrl?: string;
-      }>;
-    };
+    const value = z
+      .object({
+        headRefOid: z.string(),
+        comments: z.array(
+          z.object({ id: z.string(), body: z.string(), author: z.object({ login: z.string() }) }),
+        ),
+        statusCheckRollup: z.array(
+          z.object({
+            __typename: z.string(),
+            name: z.string().optional(),
+            conclusion: z.string().optional(),
+            detailsUrl: z.string().optional(),
+          }),
+        ),
+      })
+      .parse(JSON.parse(stdout));
+    const reviews = z
+      .array(
+        z.object({
+          id: z.union([z.string(), z.number()]).transform(String),
+          state: z.string(),
+          body: z
+            .string()
+            .nullable()
+            .transform((body) => body ?? ""),
+          commit_id: z.string(),
+          user: z.object({ login: z.string() }),
+        }),
+      )
+      .parse(JSON.parse(reviewsJson));
     const events: GitHubEvent[] = [
       {
         key: `head-${value.headRefOid}`,
@@ -578,11 +720,11 @@ export class GhCliGitHubProvider implements GitHubProvider {
         jobs,
       });
     }
-    for (const review of value.reviews) {
+    for (const review of reviews) {
       events.push({
         key: `review-${review.id}`,
         kind: "review",
-        revision: value.headRefOid,
+        revision: review.commit_id,
         reviewKind:
           review.state === "CHANGES_REQUESTED"
             ? "changes-requested"
@@ -590,7 +732,7 @@ export class GhCliGitHubProvider implements GitHubProvider {
               ? "approval"
               : "comment",
         body: review.body,
-        author: review.author.login,
+        author: review.user.login,
         resolved: false,
       });
     }
@@ -616,7 +758,7 @@ export class GhCliGitHubProvider implements GitHubProvider {
   ): Promise<GitHubEvent[]> {
     const [owner, name] = repository.split("/");
     if (!owner || !name) return [];
-    const query = `query($owner:String!,$name:String!,$number:Int!){repository(owner:$owner,name:$name){pullRequest(number:$number){reviewThreads(first:100){nodes{id,isResolved,comments(first:1){nodes{body author{login} path line}}}}}}}`;
+    const query = `query($owner:String!,$name:String!,$number:Int!){repository(owner:$owner,name:$name){pullRequest(number:$number){reviewThreads(first:100){nodes{id,isResolved,comments(first:1){nodes{body author{login} path line commit{oid}}}}}}}}`;
     try {
       const { stdout } = await execute("gh", [
         "api",
@@ -639,7 +781,13 @@ export class GhCliGitHubProvider implements GitHubProvider {
                   nodes: Array<{
                     id: string;
                     isResolved: boolean;
-                    comments: { nodes: Array<{ body: string; author: { login: string } }> };
+                    comments: {
+                      nodes: Array<{
+                        body: string;
+                        author: { login: string };
+                        commit?: { oid: string };
+                      }>;
+                    };
                   }>;
                 };
               };
@@ -652,7 +800,7 @@ export class GhCliGitHubProvider implements GitHubProvider {
         return {
           key: `thread-${thread.id}-${thread.isResolved ? "resolved" : "open"}`,
           kind: "review" as const,
-          revision,
+          revision: comment?.commit?.oid ?? revision,
           reviewKind: "inline-thread" as const,
           body: comment?.body ?? "Inline review thread",
           author: comment?.author.login ?? "unknown",
@@ -722,7 +870,7 @@ export class GhCliGitHubProvider implements GitHubProvider {
     number: number;
     expectedHeadRevision: string;
     method: "merge" | "squash" | "rebase";
-  }): Promise<{ mergeRevision: string; actor: string; mergedAt: string; method: string }> {
+  }): Promise<z.infer<typeof MergeResultSchema>> {
     const { stdout: before } = await execute("gh", [
       "pr",
       "view",

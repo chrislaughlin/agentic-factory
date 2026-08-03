@@ -38,6 +38,12 @@ export interface CommandEvidence {
   timedOut: boolean;
 }
 
+export interface CommandRunInput {
+  cwd: string;
+  revision: string;
+  environment?: Record<string, string>;
+}
+
 export class CommandNotAllowedError extends Error {
   readonly code = "COMMAND_NOT_ALLOWED";
 }
@@ -67,7 +73,7 @@ export class DeterministicCommandRunner {
       .sort((left, right) => right.length - left.length);
   }
 
-  async run(commandId: string, input: { cwd: string; revision: string }): Promise<CommandEvidence> {
+  async run(commandId: string, input: CommandRunInput): Promise<CommandEvidence> {
     const command = this.commands.get(commandId);
     if (!command) throw new CommandNotAllowedError(`Command is not configured: ${commandId}`);
     const startedAt = new Date().toISOString();
@@ -76,9 +82,10 @@ export class DeterministicCommandRunner {
         .map((name) => [name, process.env[name]])
         .filter((entry): entry is [string, string] => Boolean(entry[1])),
     );
+    const invocationEnvironment = input.environment ?? {};
     const child = spawn(command.executable, command.arguments, {
       cwd: input.cwd,
-      env: { ...safeEnvironment, ...this.environment },
+      env: { ...safeEnvironment, ...this.environment, ...invocationEnvironment },
       stdio: ["ignore", "pipe", "pipe"],
     });
     child.stdout.setEncoding("utf8");
@@ -99,8 +106,15 @@ export class DeterministicCommandRunner {
       child.once("error", reject);
       child.once("close", resolve);
     }).finally(() => clearTimeout(timeout));
+    const invocationSecrets = Object.entries(invocationEnvironment)
+      .filter(([name]) => /(token|secret|password|credential|private.?key|api.?key)/iu.test(name))
+      .map(([, value]) => value)
+      .filter(Boolean);
     const redact = (value: string) =>
-      this.secrets.reduce((redacted, secret) => redacted.split(secret).join("[REDACTED]"), value);
+      [...this.secrets, ...invocationSecrets].reduce(
+        (redacted, secret) => redacted.split(secret).join("[REDACTED]"),
+        value,
+      );
     return {
       id: `command-${randomUUID()}`,
       commandId,
@@ -127,6 +141,17 @@ export interface IsolatedWorkspace {
 
 export class WorkspaceLockedError extends Error {
   readonly code = "WORKSPACE_LOCKED";
+}
+
+export interface WorkspaceRevisionProvider {
+  currentRevision(root: string): Promise<string>;
+}
+
+export class GitWorkspaceRevisionProvider implements WorkspaceRevisionProvider {
+  async currentRevision(root: string): Promise<string> {
+    const { stdout } = await execute("git", ["rev-parse", "HEAD"], { cwd: root });
+    return stdout.trim();
+  }
 }
 
 /** Owns one repository-wide writer lock and creates one auditable Git worktree per workflow. */
@@ -157,6 +182,7 @@ export class GitWorkspaceManager {
     await this.lockHandle.writeFile(JSON.stringify({ runId: input.runId, pid: process.pid }));
     const root = join(this.worktreeRoot, input.runId);
     const branch = `agent-factory/${input.runId}`;
+    let worktreeCreated = false;
     try {
       const { stdout } = await execute("git", ["rev-parse", input.baseBranch], {
         cwd: this.repositoryRoot,
@@ -165,6 +191,7 @@ export class GitWorkspaceManager {
       await execute("git", ["worktree", "add", "-b", branch, root, input.baseBranch], {
         cwd: this.repositoryRoot,
       });
+      worktreeCreated = true;
       const dependencies = join(this.repositoryRoot, "node_modules");
       if (
         await lstat(dependencies)
@@ -175,6 +202,15 @@ export class GitWorkspaceManager {
       this.active = { runId: input.runId, root };
       return { root, branch, baseRevision };
     } catch (error) {
+      if (worktreeCreated) {
+        await execute("git", ["worktree", "remove", "--force", root], {
+          cwd: this.repositoryRoot,
+        }).catch(() => undefined);
+        await rm(root, { recursive: true, force: true });
+        await execute("git", ["branch", "-D", branch], { cwd: this.repositoryRoot }).catch(
+          () => undefined,
+        );
+      }
       await this.releaseLock();
       throw error;
     }

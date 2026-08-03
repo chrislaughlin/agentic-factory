@@ -11,6 +11,7 @@ Canonical agents and workflows live in `.agent-factory`; skills live in `.agents
 Deployment, smoke, and optional rollback commands are JSON arrays so no shell parses them:
 
 ```bash
+export AGENT_FACTORY_HARNESS_COMMAND='["./bin/my-ndjson-harness"]'
 export AGENT_FACTORY_DEPLOY_COMMAND='["./scripts/deploy.sh","production"]'
 export AGENT_FACTORY_SMOKE_COMMAND='["./scripts/smoke.sh","https://service.example/health"]'
 export AGENT_FACTORY_ROLLBACK_COMMAND='["./scripts/rollback.sh","production"]'
@@ -19,6 +20,10 @@ export AGENT_FACTORY_MERGE_METHOD='squash'
 ```
 
 Commands are allowlisted as an executable plus fixed arguments. Credentials remain out-of-band; values in configured secret/token/password fields and registered secret literals are redacted before persistence.
+
+Without `AGENT_FACTORY_HARNESS_COMMAND`, the CLI uses the scripted demonstration harness and stops after local verification. Live source changes and PR publication require a configured process harness that edits/commits in `task.workspace.root` and reports the resulting Git SHA as its source revision.
+
+The deploy command receives `AGENT_FACTORY_REVISION`, `AGENT_FACTORY_ENVIRONMENT`, and `AGENT_FACTORY_WORKFLOW_RUN_ID`. After verifying the target environment is serving that revision, its final non-empty stdout line must be JSON such as `{"revision":"<AGENT_FACTORY_REVISION>","deploymentId":"production-123"}`. A successful command without this attestation is rejected. Smoke commands receive the attested revision, deployment ID, and environment through `AGENT_FACTORY_REVISION`, `AGENT_FACTORY_DEPLOYMENT_ID`, and `AGENT_FACTORY_ENVIRONMENT`; rollback commands receive the same binding.
 
 ## Operate
 

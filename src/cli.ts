@@ -5,15 +5,17 @@ import { basename, dirname, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { promisify } from "node:util";
 import {
+  isTerminalWorkflowStatus,
   ModelProfileSchema,
   type AgentEvent,
   type ArtifactInstance,
   type WorkflowRun,
 } from "./domain.js";
 import { GhCliGitHubProvider, GitHubLifecycle, LocalGitRepositoryGateway } from "./github.js";
-import { ScriptedHarnessAdapter } from "./harness.js";
+import { ProcessHarnessAdapter, ScriptedHarnessAdapter, type HarnessAdapter } from "./harness.js";
 import {
   DeterministicCommandRunner,
+  GitWorkspaceRevisionProvider,
   GitWorkspaceManager,
   type AllowedCommand,
 } from "./infrastructure.js";
@@ -142,10 +144,22 @@ export async function runCli(
           });
           return CliExitCode.ValidationFailure;
         }
-        const data = await backend.approve(
+        const decision = await backend.approve(
           approvalId,
           option(parsed.options, "actor") ?? "local-operator",
         );
+        const data =
+          typeof decision === "object" && decision !== null
+            ? {
+                ...decision,
+                approval: {
+                  id: approval.id,
+                  kind: approval.kind,
+                  revision: approval.revision,
+                  evidenceArtifactIds: approval.evidenceArtifactIds ?? [],
+                },
+              }
+            : decision;
         output("ApprovalDecision", data);
         return exitForStatus(statusOf(data));
       }
@@ -291,6 +305,7 @@ class LocalOperatorBackend implements OperatorBackend {
     private readonly repositories: SqliteRepositories,
     private readonly engine: WorkflowEngine,
     private readonly commands: DeterministicCommandRunner,
+    private readonly harnessId: string,
   ) {}
 
   static async create(root: string, databasePath: string): Promise<LocalOperatorBackend> {
@@ -313,10 +328,20 @@ class LocalOperatorBackend implements OperatorBackend {
     const repositories = new SqliteRepositories(databasePath);
     for (const value of agents) await repositories.agents.put(value);
     for (const value of skills) await repositories.skills.put(value);
-    const harness = createScriptedHarness();
+    const harnessCommand = configuredCommand("process-harness", "AGENT_FACTORY_HARNESS_COMMAND");
+    const harness: HarnessAdapter = harnessCommand
+      ? new ProcessHarnessAdapter({
+          executable: harnessCommand.executable,
+          arguments: harnessCommand.arguments,
+        })
+      : createScriptedHarness();
     const profile = ModelProfileSchema.parse({
       id: "balanced",
-      providers: { scripted: { model: "deterministic-script" } },
+      providers: {
+        [harness.id]: {
+          model: harness.id === "process" ? "local-process" : "deterministic-script",
+        },
+      },
     });
     const configuredCommands = [
       configuredCommand("deploy", "AGENT_FACTORY_DEPLOY_COMMAND"),
@@ -341,8 +366,9 @@ class LocalOperatorBackend implements OperatorBackend {
       new Map(skills.map((value) => [value.name, value])),
       new Map([[profile.id, profile]]),
       commands,
+      new GitWorkspaceRevisionProvider(),
     );
-    return new LocalOperatorBackend(root, repositories, engine, commands);
+    return new LocalOperatorBackend(root, repositories, engine, commands, harness.id);
   }
 
   async work(input: {
@@ -354,7 +380,7 @@ class LocalOperatorBackend implements OperatorBackend {
     modelProfile?: string;
     policy?: string;
   }) {
-    if (input.harness && input.harness !== "scripted")
+    if (input.harness && input.harness !== this.harnessId)
       throw unavailable(`Harness is not configured: ${input.harness}`);
     if (input.workflow && input.workflow !== "local-sdlc")
       throw unavailable(`Workflow is not configured: ${input.workflow}`);
@@ -376,7 +402,7 @@ class LocalOperatorBackend implements OperatorBackend {
         runId,
       );
       run.configuration = {
-        harness: input.harness ?? "scripted",
+        harness: input.harness ?? this.harnessId,
         workflow: input.workflow ?? "local-sdlc",
         repository: identity.repository,
         baseBranch: input.baseBranch ?? identity.defaultBranch,
@@ -451,14 +477,23 @@ class LocalOperatorBackend implements OperatorBackend {
       const method = process.env.AGENT_FACTORY_MERGE_METHOD ?? "squash";
       if (!new Set(["merge", "squash", "rebase"]).has(method))
         throw new Error(`Unsupported merge method: ${method}`);
-      const released = await this.releaseLifecycle(run).approveAndDeploy(approvalId, actor, {
-        repository: pullRequest.repository,
-        pullRequestNumber: pullRequest.number,
-        mergeMethod: method as "merge" | "squash" | "rebase",
-        environment: process.env.AGENT_FACTORY_ENVIRONMENT ?? "production",
-        smokeCommandIds: ["smoke"],
-      });
-      return { runId: released.id, status: released.status, revision: released.revision };
+      try {
+        const released = await this.releaseLifecycle(run).approveAndDeploy(approvalId, actor, {
+          repository: pullRequest.repository,
+          pullRequestNumber: pullRequest.number,
+          mergeMethod: method as "merge" | "squash" | "rebase",
+          environment: process.env.AGENT_FACTORY_ENVIRONMENT ?? "production",
+          smokeCommandIds: ["smoke"],
+        });
+        if (isTerminalWorkflowStatus(released.status))
+          await this.cleanupWorkspace(released).catch(() => {});
+        return { runId: released.id, status: released.status, revision: released.revision };
+      } catch (error) {
+        const refreshed = await this.engine.get(run.id);
+        if (refreshed && isTerminalWorkflowStatus(refreshed.status))
+          await this.cleanupWorkspace(refreshed).catch(() => {});
+        throw error;
+      }
     }
     const run = await this.engine.approve(approvalId, actor);
     return { runId: run.id, status: run.status, revision: run.revision };
@@ -485,6 +520,10 @@ class LocalOperatorBackend implements OperatorBackend {
     let run = await this.engine.get(workflowRunId);
     if (!run) throw new Error(`Workflow not found: ${workflowRunId}`);
     if (run.status === "locally-verified") {
+      if (run.configuration?.harness === "scripted")
+        throw unavailable(
+          "The scripted harness is a local demonstration and cannot publish source changes; configure AGENT_FACTORY_HARNESS_COMMAND and submit with --harness process",
+        );
       await new GitHubLifecycle(
         this.repositories,
         new GhCliGitHubProvider(),
@@ -512,12 +551,11 @@ class LocalOperatorBackend implements OperatorBackend {
       }
     } else if (run.status === "deploying" || run.status === "verifying") {
       run = await this.releaseLifecycle(run).observe(run.id);
-      if (new Set(["completed", "rolled-back"]).has(run.status))
-        await this.cleanupWorkspace(run).catch(() => {});
     } else {
       run = await this.engine.resume(run.id);
     }
     run = (await this.engine.get(run.id))!;
+    if (isTerminalWorkflowStatus(run.status)) await this.cleanupWorkspace(run).catch(() => {});
     const pendingApproval = (await this.repositories.approvals.list(run.id)).find(
       (approval) => approval.status === "pending",
     );
@@ -532,7 +570,11 @@ class LocalOperatorBackend implements OperatorBackend {
   async harnesses() {
     return [
       { id: "scripted", ready: true, purpose: "deterministic local demonstration" },
-      { id: "process", ready: true, purpose: "real NDJSON subprocess harness" },
+      {
+        id: "process",
+        ready: Boolean(process.env.AGENT_FACTORY_HARNESS_COMMAND),
+        purpose: "real NDJSON subprocess harness; configure AGENT_FACTORY_HARNESS_COMMAND",
+      },
       { id: "codex", ready: false, purpose: "requires deployment adapter configuration" },
       { id: "claude-code", ready: false, purpose: "requires deployment adapter configuration" },
       { id: "opencode", ready: false, purpose: "requires deployment adapter configuration" },
@@ -559,7 +601,10 @@ class LocalOperatorBackend implements OperatorBackend {
     checks.push({
       name: "harness",
       ready: true,
-      detail: "scripted and process harnesses available",
+      detail:
+        this.harnessId === "process"
+          ? "configured process harness available"
+          : "scripted demonstration harness available; set AGENT_FACTORY_HARNESS_COMMAND for live work",
     });
     try {
       await execute("gh", ["auth", "status"]);
