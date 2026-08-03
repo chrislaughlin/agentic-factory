@@ -14,6 +14,7 @@
 - Do not change production sources, dependency manifests, build configuration, or CI configuration.
 - Test externally meaningful behavior. Avoid tests that only mirror implementation details.
 - Run focused tests while iterating, then the configured full tests and required deterministic checks.
+- Revalidate every journaled environment-file path according to the worktree identity contract immediately before staging or committing. Never stage one of those paths, even forcibly.
 - Commit changed test assets separately. If no change is needed, return the unchanged head and explain existing coverage.
 
 ## Output

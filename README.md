@@ -31,7 +31,7 @@ flowchart LR
 
 `do-work` always remains the orchestrator. Specialists cannot spawn agents or inherit the lifecycle. Production code has one writer (`construct-work`); security, QA, code-quality review, and remote monitoring are read-only; `author-tests` may change only tests and fixtures.
 
-After plan approval, each work item receives a dedicated task branch and sibling Git worktree created from the recorded baseline. Construction, tests, runtime QA, review, publication, and remediation use that worktree; the checkout where the human invoked `do-work` remains untouched. The journal lives in the Git common directory and records the absolute worktree path for safe resumption. Agent Factory retains the worktree at handoff so the human can inspect it and remove it after review or merge.
+After plan approval, each work item receives a dedicated task branch and sibling Git worktree created from the recorded baseline. Ignored local `.env` files are copied from the journaled invoking checkout into matching relative paths without exposing their contents; unsafe symlinks, collisions, modified tracked files, and non-ignored environment files block delegation. Construction, tests, runtime QA, review, publication, and remediation use that worktree; the checkout where the human invoked `do-work` remains untouched. The journal lives in the Git common directory and records both absolute checkout paths for safe resumption. Agent Factory retains the worktree at handoff so the human can inspect it and remove it after review or merge.
 
 ## Included skills
 
@@ -95,6 +95,7 @@ Work journals stay local under Git's shared private metadata at `<git-common-dir
 - Planning asks one material human decision at a time and recommends an answer. Repository facts are discovered, not asked.
 - No code changes begin until the human explicitly approves a decision-complete plan.
 - Every approved work item runs in its own Git worktree; unrelated changes in the invoking checkout are neither stashed nor copied into it.
+- New worktrees receive a one-time copy of ignored local `.env` and `.env.*` regular files, while tracked templates continue to come from Git. Copied paths are revalidated before every checkpoint commit and push so later ignore-rule changes cannot expose them.
 - Oversized requests are sliced and wait for the human to select a slice.
 - Construction and test changes become separate Git checkpoint commits. Security reviews the immutable construction SHA while tests run in parallel.
 - QA requires runtime evidence for observable behavior. Missing required runtime access is blocked, not waived.

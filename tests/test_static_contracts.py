@@ -44,6 +44,26 @@ class StaticContractTests(unittest.TestCase):
         self.assertIn("delegated worktree", construction)
         self.assertIn("delegated worktree", tests)
 
+    def test_new_worktree_copies_local_environment_files_safely(self):
+        do_work = (ROOT / ".agents/skills/do-work/SKILL.md").read_text()
+        worktree = (ROOT / ".agents/skills/do-work/references/worktree.md").read_text()
+        journal = (ROOT / ".agents/skills/do-work/references/journal.md").read_text()
+        construction = (ROOT / ".agents/skills/construct-work/references/contract.md").read_text()
+        tests = (ROOT / ".agents/skills/author-tests/references/contract.md").read_text()
+        self.assertIn("ls-files --others --ignored --exclude-standard -z", worktree)
+        self.assertIn("`.env` and `.env.*`", worktree)
+        self.assertIn("regular files", worktree)
+        self.assertIn("Never print", worktree)
+        self.assertIn("differs from the recorded baseline", worktree)
+        self.assertIn("reject any existing symlink", worktree)
+        self.assertIn("Control checkout: <absolute path>", journal)
+        self.assertIn("Environment bootstrap", journal)
+        self.assertIn("Before every checkpoint commit and push", worktree)
+        self.assertIn("before staging or committing", construction)
+        self.assertIn("before staging or committing", tests)
+        self.assertIn("before every later push", do_work)
+        self.assertIn("before delegating", do_work)
+
     def test_specialist_boundaries_are_explicit(self):
         construction = (ROOT / ".agents/skills/construct-work/references/contract.md").read_text()
         tests = (ROOT / ".agents/skills/author-tests/references/contract.md").read_text()
@@ -71,6 +91,10 @@ class StaticContractTests(unittest.TestCase):
             scenarios["worktree_isolation"]["writable_stages"],
             ["construction", "author-tests", "remediation"],
         )
+        self.assertTrue(scenarios["worktree_isolation"]["copy_ignored_env_files"])
+        self.assertFalse(scenarios["worktree_isolation"]["copy_env_symlinks"])
+        self.assertTrue(scenarios["worktree_isolation"]["block_modified_tracked_env_files"])
+        self.assertTrue(scenarios["worktree_isolation"]["block_destination_symlink_ancestors"])
         self.assertEqual(scenarios["human_boundary"]["agent_must_not"], ["merge", "deploy"])
 
 

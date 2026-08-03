@@ -11,6 +11,7 @@ Store each run at `<absolute-git-common-directory>/agent-factory/work/<task-key>
 - Source: <reference>
 - Forge: github | gitlab
 - Git common directory: <absolute path>
+- Control checkout: <absolute path>
 - Worktree: <absolute path>
 - Branch: <branch>
 - Baseline: <sha>
@@ -18,6 +19,9 @@ Store each run at `<absolute-git-common-directory>/agent-factory/work/<task-key>
 
 ## Approved plan
 <scope, ordered changes, interfaces, risks, acceptance criteria, verification>
+
+## Environment bootstrap
+- <copied relative .env path, or none>
 
 ## State
 - Stage: planning | construction | parallel-verification | qa | code-quality | publication | monitoring | human-handoff | blocked
@@ -43,4 +47,4 @@ Store each run at `<absolute-git-common-directory>/agent-factory/work/<task-key>
 Use $do-work <original-reference-or-pr-url> and validate branch/revisions before continuing.
 ```
 
-Append evidence; do not erase failed attempts. Update the state summary atomically after a stage finishes. Before resuming, verify the Git common directory, registered worktree path, branch, PR/MR head, and recorded SHAs. If a human removed the worktree, recreate it from the validated recorded branch. If state diverges, mark prior downstream evidence stale and return to the earliest affected stage.
+Append evidence; do not erase failed attempts. Update the state summary atomically after a stage finishes. Never store environment-file contents or values. Before resuming, verify the Git common directory, control checkout, registered worktree path, branch, PR/MR head, recorded SHAs, and environment-bootstrap paths. If a human removed the worktree, recreate it from the validated recorded branch and bootstrap only from the recorded control checkout. If state diverges, mark prior downstream evidence stale and return to the earliest affected stage.

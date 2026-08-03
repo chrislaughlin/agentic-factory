@@ -14,7 +14,11 @@
   "worktree_isolation": {
     "required": true,
     "writable_stages": ["construction", "author-tests", "remediation"],
-    "primary_checkout_writes": false
+    "primary_checkout_writes": false,
+    "copy_ignored_env_files": true,
+    "copy_env_symlinks": false,
+    "block_modified_tracked_env_files": true,
+    "block_destination_symlink_ancestors": true
   },
   "human_boundary": { "agent_may": ["create ready PR/MR", "monitor CI and reviews"], "agent_must_not": ["merge", "deploy"] }
 }

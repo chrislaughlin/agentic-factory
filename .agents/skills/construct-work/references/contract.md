@@ -15,6 +15,7 @@
 - Never edit tests or fixtures unless the approved plan explicitly makes them production artifacts; leave verification coverage to `author-tests`.
 - Never overwrite unrelated dirty changes, rewrite public history, use destructive Git recovery, or commit secrets.
 - Resolve every delegated finding or return it as blocked with concrete evidence. Do not silently skip it.
+- Revalidate every journaled environment-file path according to the worktree identity contract immediately before staging or committing. Never stage one of those paths, even forcibly.
 - End with a clean worktree for paths owned by this stage and a checkpoint commit based on the expected branch.
 
 ## Output

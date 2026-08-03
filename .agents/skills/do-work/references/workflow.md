@@ -6,6 +6,7 @@
 - Preserve unrelated changes in the user's control checkout. Never stash, copy, commit, or otherwise carry them into the task worktree.
 - Record the baseline branch and commit before construction. Uncommitted control-checkout changes are not part of that baseline; stop if the requested work depends on them.
 - Require the dedicated task branch and [worktree identity](worktree.md) defined for each work item. Place its absolute path outside every existing worktree, never reuse it for another item, and never rewrite published history.
+- Bootstrap ignored local environment files according to [worktree.md](worktree.md) before any specialist runs. Never copy an environment file that could become tracked.
 
 ## Checkpoints and stages
 
