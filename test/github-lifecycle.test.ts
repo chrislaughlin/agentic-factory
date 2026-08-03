@@ -245,24 +245,37 @@ describe("GitHub lifecycle", () => {
         author: "reviewer",
         resolved: false,
       },
+      {
+        key: "comment-replay-second",
+        kind: "review",
+        revision: run.revision,
+        reviewKind: "comment",
+        body: "Please update the retry coverage too",
+        author: "reviewer",
+        resolved: false,
+      },
     ];
     const append = repositories.externalEvents.append;
-    let failOnce = true;
+    let appendCalls = 0;
     repositories.externalEvents.append = async (event) => {
-      if (failOnce) {
-        failOnce = false;
-        throw new Error("simulated dedupe write interruption");
-      }
+      appendCalls++;
+      if (appendCalls === 2) throw new Error("simulated dedupe write interruption");
       await append(event);
     };
 
     await expect(lifecycle.poll(run.id)).rejects.toThrow("simulated dedupe write interruption");
-    await expect(lifecycle.poll(run.id)).resolves.toMatchObject({ processed: 1 });
+    await expect(lifecycle.poll(run.id)).resolves.toMatchObject({ processed: 1, duplicates: 1 });
     expect(await repositories.workflowRuns.get(run.id)).toMatchObject({
       status: "running",
-      remediationAttempts: 1,
+      remediationAttempts: 2,
     });
-    expect(await repositories.externalEvents.list(run.id)).toHaveLength(1);
+    expect(await repositories.externalEvents.list(run.id)).toHaveLength(2);
+    expect(
+      (await repositories.artifacts.list(run.id)).filter(
+        (artifact) =>
+          artifact.producingStageId === "github-monitor" && artifact.type === "remediation-request",
+      ),
+    ).toHaveLength(2);
     repositories.close();
   });
 });

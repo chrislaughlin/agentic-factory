@@ -336,32 +336,36 @@ export class GitHubLifecycle {
       !hasUnresolvedRequest &&
       !hasPendingTriage;
     if (actionable.length) {
-      const remediationId = `github-remediation-${actionable
-        .map(({ event }) => safeId(event.key))
-        .join("-")}`;
-      const existingRemediation = currentArtifacts.some(
-        (artifact) => artifact.id === remediationId && artifact.validation.valid,
+      const existingRemediationIds = new Set(
+        currentArtifacts
+          .filter((candidate) => candidate.type === "remediation-request")
+          .map((candidate) => candidate.id),
       );
-      if (!existingRemediation) {
-        run.remediationAttempts++;
-        if (run.remediationAttempts > this.maximumExternalRemediationAttempts) {
-          run.status = "escalated";
-          run.escalationReason = "External remediation budget exceeded";
-        } else {
-          const findings = actionable.map(({ event }) => feedbackFinding(event));
+      for (const { event } of actionable) {
+        const remediationId = `github-remediation-${safeId(event.key)}`;
+        if (!existingRemediationIds.has(remediationId)) {
+          const finding = feedbackFinding(event);
           await this.repositories.artifacts.save(
             run.id,
             artifact(remediationId, "remediation-request", "github-monitor", run.revision, {
               revision: run.revision,
-              findings,
-              findingFingerprints: findings.map((finding) => finding.fingerprint),
+              findings: [finding],
+              findingFingerprints: [finding.fingerprint],
               guidance:
                 "Address actionable GitHub CI and review feedback, then publish a new revision",
             }),
           );
+          existingRemediationIds.add(remediationId);
         }
       }
-      if (run.status !== "escalated") {
+      const durableRemediationCount = (await this.repositories.artifacts.list(run.id)).filter(
+        (candidate) => candidate.type === "remediation-request",
+      ).length;
+      run.remediationAttempts = Math.max(run.remediationAttempts, durableRemediationCount);
+      if (run.remediationAttempts > this.maximumExternalRemediationAttempts) {
+        run.status = "escalated";
+        run.escalationReason = "External remediation budget exceeded";
+      } else {
         resetLocalVerificationStages(run);
         run.status = "running";
       }
