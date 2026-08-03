@@ -2,7 +2,7 @@
 
 The production workflow evolves through submitted, planning, optional clarification, plan approval, workspace preparation, construction, testing, parallel security/QA/code review, quality gate, remediation, pull request, externally monitored CI/review, selective revalidation, merge approval, merge, deployment, post-deployment verification, and completion or rollback/escalation.
 
-The current workflow is the executable prefix through quality gate. `StageDefinition` can describe later agent, approval, tool, and gate stages without coupling them to a provider. External waits belong in event-driven services that append state changes; they must never be agents polling in a reasoning loop.
+The checked-in workflow executes the local prefix through quality gate; the GitHub and release lifecycle services then carry the same durable run through pull request, CI/review, final approval, merge, deployment, smoke verification, and terminal cleanup. External waits are one-shot, cursor-backed observations invoked by `resume`; they never occupy an agent reasoning loop.
 
 ## Invalidation
 
@@ -17,4 +17,4 @@ Additionally, revision-bound evidence is invalid when its source revision differ
 
 ## Failure policy
 
-Stages default to three attempts and workflows to eight total remediation passes. Capability gaps, recurring findings, exhausted attempts/budgets, conflicting conclusions, new permissions, scope changes, and requirements changes escalate to a human. The implemented slice enforces attempt/remediation limits and recurring-finding escalation; conflicts and scope/permission changes will enter through future typed triage events.
+Stages default to three attempts and workflows to eight total remediation passes. Capability gaps, recurring findings, exhausted attempts/budgets, unclassified feedback, merge races, revision mismatches, malformed provider responses, deployment failures without rollback, and failed rollback all stop or escalate safely. Scope, permissions, or acceptance-criteria changes remain explicit operator decisions rather than inferred remediation.

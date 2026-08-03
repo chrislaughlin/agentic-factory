@@ -61,6 +61,19 @@ function events(runId: string, value: ArtifactInstance): AgentEvent[] {
     }),
   ];
 }
+function finding(fingerprint: string, revision: string) {
+  return {
+    id: `finding-${fingerprint}`,
+    severity: "medium" as const,
+    title: "Review finding",
+    description: "A review finding requires remediation",
+    evidence: "Observed by the reviewer",
+    sourceLocation: { path: "src/x.ts", line: 1 },
+    revision,
+    fingerprint,
+    resolved: false,
+  };
+}
 const agent = (id: string, write = false): AgentDefinition =>
   AgentDefinitionSchema.parse({
     apiVersion: "agent-factory.dev/v1alpha1",
@@ -310,6 +323,53 @@ describe("workflow vertical slice", () => {
     expect(() => lease.acquire("testing-1")).toThrow(ConcurrentWriterError);
     lease.release("construction-1");
     expect(() => lease.acquire("testing-1")).not.toThrow();
+  });
+  it("cancels durably and does not resume a terminal workflow", async () => {
+    const repositories = new InMemoryRepositories();
+    const adapter = new ScriptedHarnessAdapter({
+      planning: ({ runId }) =>
+        events(
+          runId,
+          artifact("implementation-plan", "planning", "initial", {
+            summary: "p",
+            steps: ["x"],
+            acceptanceCriteria: ["x"],
+          }),
+        ),
+    });
+    const planner = agent("planner");
+    const engine = new WorkflowEngine(
+      repositories,
+      adapter,
+      WorkflowDefinitionSchema.parse({
+        apiVersion: "agent-factory.dev/v1alpha1",
+        kind: "Workflow",
+        metadata: { id: "cancel", version: "1" },
+        stages: [
+          {
+            id: "planning",
+            kind: "agent",
+            agentId: "planner",
+            outputArtifact: "implementation-plan",
+          },
+          { id: "plan-approval", kind: "approval", dependsOn: ["planning"] },
+        ],
+      }),
+      new Map([[planner.metadata.id, planner]]),
+      new Map([[skill.name, skill]]),
+      new Map([[profile.id, profile]]),
+    );
+    const paused = await engine.submit("cancel me");
+
+    const cancelled = await engine.cancel(paused.id, "operator cancelled");
+    const resumed = await engine.resume(paused.id);
+
+    expect(cancelled.status).toBe("cancelled");
+    expect(resumed.status).toBe("cancelled");
+
+    cancelled.status = "waiting-final-approval";
+    await repositories.workflowRuns.save(cancelled);
+    expect((await engine.resume(paused.id)).status).toBe("waiting-final-approval");
   });
   it("restricts agent permissions to the stage permission boundary", async () => {
     const repositories = new InMemoryRepositories();
@@ -605,7 +665,7 @@ describe("workflow vertical slice", () => {
           artifact("code-review", "code-review", task.workspace.revision, {
             revision: task.workspace.revision,
             approved: reviews === 2,
-            findings: reviews === 1 ? [{ fingerprint: "bug-1" }] : [],
+            findings: reviews === 1 ? [finding("bug-1", task.workspace.revision)] : [],
           }),
         );
       },
@@ -676,7 +736,7 @@ describe("workflow vertical slice", () => {
           artifact("code-review", "code-review", task.workspace.revision, {
             revision: task.workspace.revision,
             approved: false,
-            findings: [{ fingerprint: "same" }],
+            findings: [finding("same", task.workspace.revision)],
           }),
         ),
     });

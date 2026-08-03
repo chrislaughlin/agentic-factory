@@ -7,6 +7,7 @@ import {
   type AgentResult,
   type ApprovalRequest,
   type ArtifactInstance,
+  type Finding,
   type ModelProfile,
   type PermissionSet,
   type SkillDefinition,
@@ -17,6 +18,12 @@ import {
   type WorkflowRun,
 } from "./domain.js";
 import { assertHarnessCompatibility, type HarnessAdapter } from "./harness.js";
+import type {
+  CommandEvidence,
+  DeterministicCommandRunner,
+  WorkspaceRevisionProvider,
+} from "./infrastructure.js";
+import { noOpObservability, type FactoryObservability } from "./observability.js";
 import type { FactoryRepositories } from "./repositories.js";
 
 export class ConcurrentWriterError extends Error {
@@ -62,9 +69,18 @@ export class WorkflowEngine {
     private readonly agents: Map<string, AgentDefinition>,
     private readonly skills: Map<string, SkillDefinition>,
     private readonly profiles: Map<string, ModelProfile>,
+    private readonly commandRunner?: DeterministicCommandRunner,
+    private readonly revisionProvider?: WorkspaceRevisionProvider,
+    private readonly observability: FactoryObservability = noOpObservability,
   ) {}
-  async submit(objective: string, revision = "initial"): Promise<WorkflowRun> {
-    const id = `wf-${randomUUID()}`;
+  async submit(
+    objective: string,
+    revision = "initial",
+    workspace?: { root: string; branch: string; baseRevision: string },
+    requestedId?: string,
+    configuration?: WorkflowRun["configuration"],
+  ): Promise<WorkflowRun> {
+    const id = requestedId ?? `wf-${randomUUID()}`;
     const stageRuns = this.definition.stages.map((stage) => ({
       id: `${id}-${stage.id}`,
       stageId: stage.id,
@@ -80,8 +96,14 @@ export class WorkflowEngine {
       revision,
       stageRuns,
       remediationAttempts: 0,
+      ...(workspace ? { workspace } : {}),
+      ...(configuration ? { configuration } : {}),
     };
     await this.repositories.workflowRuns.save(run);
+    this.observability.scope({ workflowRunId: run.id }).info("workflow.submitted", {
+      workflowId: run.workflowId,
+      revision: run.revision,
+    });
     await this.drive(run);
     return (await this.get(id))!;
   }
@@ -89,14 +111,20 @@ export class WorkflowEngine {
     const approval = await this.repositories.approvals.get(approvalId);
     if (!approval || approval.status !== "pending")
       throw new Error(`Pending approval not found: ${approvalId}`);
+    const pendingRun = await this.get(approval.workflowRunId);
+    if (!pendingRun) throw new Error("Workflow not found");
+    if (approval.revision && approval.revision !== pendingRun.revision)
+      throw new Error(
+        `Approval ${approvalId} is stale: expected ${approval.revision}, current ${pendingRun.revision}`,
+      );
     const decided: ApprovalRequest = {
       ...approval,
       status: "approved",
       decidedAt: new Date().toISOString(),
+      decidedBy: approver,
     };
     await this.repositories.approvals.save(decided);
-    const run = await this.get(approval.workflowRunId);
-    if (!run) throw new Error("Workflow not found");
+    const run = pendingRun;
     const stage = run.stageRuns.find((x) => x.stageId === approval.stageId)!;
     stage.status = "completed";
     run.status = "running";
@@ -119,23 +147,84 @@ export class WorkflowEngine {
   async get(id: string) {
     return this.repositories.workflowRuns.get(id);
   }
+  async reject(approvalId: string, actor: string, reason: string): Promise<WorkflowRun> {
+    const approval = await this.repositories.approvals.get(approvalId);
+    if (!approval || approval.status !== "pending")
+      throw new Error(`Pending approval not found: ${approvalId}`);
+    await this.repositories.approvals.save({
+      ...approval,
+      status: "rejected",
+      decidedAt: new Date().toISOString(),
+      decidedBy: actor,
+      reason,
+    });
+    const run = await this.get(approval.workflowRunId);
+    if (!run) throw new Error(`Workflow not found: ${approval.workflowRunId}`);
+    run.status = "cancelled";
+    run.escalationReason = `Approval rejected by ${actor}: ${reason}`;
+    await this.repositories.workflowRuns.save(run);
+    return run;
+  }
+  async cancel(workflowRunId: string, reason: string): Promise<WorkflowRun> {
+    const run = await this.get(workflowRunId);
+    if (!run) throw new Error(`Workflow not found: ${workflowRunId}`);
+    for (const stage of run.stageRuns.filter((candidate) => candidate.status === "running"))
+      await this.harness.cancel(stage.id);
+    run.status = "cancelled";
+    run.escalationReason = reason;
+    await this.repositories.workflowRuns.save(run);
+    return run;
+  }
+  async retry(workflowRunId: string, stageId: string): Promise<WorkflowRun> {
+    const run = await this.get(workflowRunId);
+    if (!run) throw new Error(`Workflow not found: ${workflowRunId}`);
+    const index = run.stageRuns.findIndex((stage) => stage.stageId === stageId);
+    if (index < 0) throw new Error(`Stage not found: ${stageId}`);
+    for (const stage of run.stageRuns.slice(index)) {
+      if (stage.status !== "waiting-approval") stage.status = "pending";
+      await this.repositories.stageRuns.save(run.id, stage);
+    }
+    run.status = "running";
+    delete run.escalationReason;
+    await this.repositories.workflowRuns.save(run);
+    await this.drive(run);
+    return (await this.get(run.id))!;
+  }
+  async resume(workflowRunId: string): Promise<WorkflowRun> {
+    const run = await this.get(workflowRunId);
+    if (!run) throw new Error(`Workflow not found: ${workflowRunId}`);
+    if (run.status !== "running") return run;
+    for (const stage of run.stageRuns.filter((candidate) => candidate.status === "running")) {
+      stage.status = "pending";
+      await this.repositories.stageRuns.save(run.id, stage);
+    }
+    await this.repositories.workflowRuns.save(run);
+    await this.drive(run);
+    return (await this.get(run.id))!;
+  }
   private async drive(run: WorkflowRun): Promise<void> {
     while (run.status === "running") {
-      const next = this.nextReady(run);
-      if (!next) {
+      const ready = this.readyStages(run);
+      if (!ready.length) {
         if (run.stageRuns.every((x) => x.status === "completed")) {
-          run.status = "completed";
+          run.status = this.definition.completionStatus;
           await this.repositories.workflowRuns.save(run);
         }
         return;
       }
-      const definition = this.definition.stages.find((x) => x.id === next.stageId)!;
+      const next = ready[0]!;
+      const definition = this.stageDefinition(next);
       if (definition.kind === "approval") {
         const approval: ApprovalRequest = {
           id: `approval-${randomUUID()}`,
           workflowRunId: run.id,
           stageId: definition.id,
           status: "pending",
+          kind: definition.id.includes("final") ? "final" : "plan",
+          revision: run.revision,
+          evidenceArtifactIds: (await this.repositories.artifacts.list(run.id))
+            .filter((artifact) => artifact.validation.valid)
+            .map((artifact) => artifact.id),
           createdAt: new Date().toISOString(),
         };
         next.status = "waiting-approval";
@@ -154,12 +243,32 @@ export class WorkflowEngine {
         await this.qualityGate(run, next);
         continue;
       }
-      await this.executeAgentStage(run, next, definition);
+      if (definition.kind === "tool") {
+        await this.executeToolStage(run, next, definition);
+        continue;
+      }
+      const readyAgents = ready.filter((stage) => this.stageDefinition(stage).kind === "agent");
+      const canRunTogether =
+        readyAgents.length > 1 &&
+        readyAgents.every((stage) => !this.isWritable(this.stageDefinition(stage)));
+      if (canRunTogether) {
+        const revision = run.revision;
+        await Promise.all(
+          readyAgents.map((stage) =>
+            this.executeAgentStage(run, stage, this.stageDefinition(stage)),
+          ),
+        );
+        if (run.revision !== revision)
+          await this.escalate(run, readyAgents[0]!, "Revision changed during parallel review");
+        await this.repositories.workflowRuns.save(run);
+      } else {
+        await this.executeAgentStage(run, next, definition);
+      }
       if (run.status !== "running") return;
     }
   }
-  private nextReady(run: WorkflowRun): StageRun | undefined {
-    return run.stageRuns.find(
+  private readyStages(run: WorkflowRun): StageRun[] {
+    return run.stageRuns.filter(
       (candidate) =>
         candidate.status === "pending" &&
         this.definition.stages
@@ -169,6 +278,82 @@ export class WorkflowEngine {
               run.stageRuns.find((x) => x.stageId === dependency)?.status === "completed",
           ),
     );
+  }
+  private stageDefinition(stage: StageRun): StageDefinition {
+    return this.definition.stages.find((candidate) => candidate.id === stage.stageId)!;
+  }
+  private isWritable(definition: StageDefinition): boolean {
+    if (!definition.agentId) return false;
+    const agent = this.agents.get(definition.agentId);
+    return Boolean(
+      agent &&
+      restrictPermissions(agent.spec.permissions, definition.permissions).filesystem ===
+        "workspace-write",
+    );
+  }
+  private async executeToolStage(
+    run: WorkflowRun,
+    stage: StageRun,
+    definition: StageDefinition,
+  ): Promise<void> {
+    if (!this.commandRunner)
+      return this.escalate(
+        run,
+        stage,
+        `No deterministic command runner configured for ${stage.stageId}`,
+      );
+    if (!definition.commandIds.length)
+      return this.escalate(run, stage, `No commands configured for ${stage.stageId}`);
+    stage.status = "running";
+    stage.attempts++;
+    const telemetry = this.observability.scope({
+      workflowRunId: run.id,
+      stageId: stage.stageId,
+    });
+    telemetry.info("stage.started", { kind: "tool", revision: run.revision });
+    await this.save(run, stage);
+    try {
+      const commands: CommandEvidence[] = [];
+      for (const commandId of definition.commandIds) {
+        commands.push(
+          await this.commandRunner.run(commandId, {
+            cwd: run.workspace?.root ?? ".",
+            revision: run.revision,
+          }),
+        );
+      }
+      if (this.revisionProvider && run.workspace) {
+        const [actualRevision, clean] = await Promise.all([
+          this.revisionProvider.currentRevision(run.workspace.root),
+          this.revisionProvider.isClean(run.workspace.root),
+        ]);
+        if (actualRevision !== run.revision || !clean)
+          throw new Error(
+            `Deterministic checks left workspace ${clean ? "at a different revision" : "dirty"}: expected ${run.revision}, found ${actualRevision}`,
+          );
+      }
+      const artifact = this.createArtifact(
+        definition.outputArtifact ?? "command-report",
+        stage.stageId,
+        "tool",
+        "deterministic-command-runner",
+        run.revision,
+        { revision: run.revision, passed: commands.every((command) => command.passed), commands },
+        [],
+      );
+      await this.repositories.artifacts.save(run.id, artifact);
+      stage.artifactIds.push(artifact.id);
+      stage.status = "completed";
+      await this.save(run, stage);
+      telemetry.info("stage.completed", { passed: commands.every((command) => command.passed) });
+      telemetry.increment("agent_factory_stage_completed", 1, { kind: "tool" });
+    } catch (error) {
+      await this.escalate(
+        run,
+        stage,
+        `Deterministic command execution failed: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
   }
   private async executeAgentStage(
     run: WorkflowRun,
@@ -184,16 +369,22 @@ export class WorkflowEngine {
       this.writerLease.acquire(stage.id);
     }
     try {
+      const telemetry = this.observability.scope({
+        workflowRunId: run.id,
+        stageId: stage.stageId,
+      });
       stage.status = "running";
       stage.attempts++;
+      telemetry.info("stage.started", { kind: "agent", revision: run.revision });
       await this.save(run, stage);
-      if (stage.attempts > this.definition.policy.maximumAttemptsPerStage)
+      if (stage.attempts > this.policyFor(run).maximumAttemptsPerStage)
         return await this.escalate(run, stage, `Stage ${stage.stageId} exceeded retry limit`);
       const selectedSkills = agent.spec.capabilities.skills
         .map((id) => this.skills.get(id))
         .filter((skill): skill is SkillDefinition => Boolean(skill));
-      const profile = this.profiles.get(agent.spec.model.profile);
-      if (!profile) throw new Error(`Unknown model profile ${agent.spec.model.profile}`);
+      const profileId = run.configuration?.modelProfile ?? agent.spec.model.profile;
+      const profile = this.profiles.get(profileId);
+      if (!profile) throw new Error(`Unknown model profile ${profileId}`);
       const config = await this.harness.materialize({
         agent,
         skills: selectedSkills,
@@ -211,7 +402,11 @@ export class WorkflowEngine {
         objective: run.objective,
         requiredSkills: selectedSkills.map((x) => x.name),
         optionalSkills: [],
-        workspace: { root: ".", revision: run.revision },
+        workspace: {
+          root: run.workspace?.root ?? ".",
+          ...(run.workspace?.branch ? { branch: run.workspace.branch } : {}),
+          revision: run.revision,
+        },
         inputs: inputs.map((x) => ({ artifactId: x.id, type: x.type, version: x.version })),
         expectedOutput: { type: definition.outputArtifact!, version: "v1" },
         permissions,
@@ -225,10 +420,7 @@ export class WorkflowEngine {
         if (event.type === "agent.failed") {
           stage.status = event.error.retryable ? "pending" : "failed";
           await this.save(run, stage);
-          if (
-            event.error.retryable &&
-            stage.attempts < this.definition.policy.maximumAttemptsPerStage
-          )
+          if (event.error.retryable && stage.attempts < this.policyFor(run).maximumAttemptsPerStage)
             return;
           return await this.escalate(run, stage, event.error.message);
         }
@@ -252,10 +444,65 @@ export class WorkflowEngine {
           `Stage ${stage.stageId} produced an invalid artifact: ${error instanceof Error ? error.message : String(error)}`,
         );
       }
-      const sourceRevision =
+      const reportedRevision =
         result.artifact.type === "source-change"
           ? (result.artifact.content as { revision: string }).revision
-          : run.revision;
+          : typeof result.artifact.content === "object" &&
+              result.artifact.content !== null &&
+              "revision" in result.artifact.content
+            ? (result.artifact.content as { revision: unknown }).revision
+            : undefined;
+      let sourceRevision =
+        result.artifact.type === "source-change" ? (reportedRevision as string) : run.revision;
+      let revisionChangeKind: "source" | "test" | "documentation" | undefined =
+        result.artifact.type === "source-change"
+          ? (
+              result.artifact.content as {
+                changeKind: "source" | "test" | "documentation";
+              }
+            ).changeKind
+          : undefined;
+      if (permissions.filesystem === "workspace-write" && this.revisionProvider && run.workspace) {
+        const [actualRevision, clean] = await Promise.all([
+          this.revisionProvider.currentRevision(run.workspace.root),
+          this.revisionProvider.isClean(run.workspace.root),
+        ]);
+        if (!clean)
+          return await this.escalate(
+            run,
+            stage,
+            `Writable stage ${stage.stageId} left uncommitted workspace changes`,
+          );
+        if (reportedRevision !== actualRevision)
+          return await this.escalate(
+            run,
+            stage,
+            `Stage ${stage.stageId} reported revision ${String(reportedRevision)}, but workspace HEAD is ${actualRevision}`,
+          );
+        sourceRevision = actualRevision;
+        if (
+          result.artifact.type !== "source-change" &&
+          stage.stageId === "test" &&
+          actualRevision !== run.revision
+        )
+          revisionChangeKind = "test";
+        else if (result.artifact.type !== "source-change" && actualRevision !== run.revision)
+          return await this.escalate(
+            run,
+            stage,
+            `Writable stage ${stage.stageId} changed HEAD without a supported change artifact`,
+          );
+      } else if (
+        result.artifact.type !== "source-change" &&
+        reportedRevision !== undefined &&
+        reportedRevision !== run.revision
+      ) {
+        return await this.escalate(
+          run,
+          stage,
+          `Stage ${stage.stageId} produced evidence for a stale revision`,
+        );
+      }
       const artifact: ArtifactInstance = {
         ...result.artifact,
         producingStageId: stage.stageId,
@@ -268,18 +515,19 @@ export class WorkflowEngine {
       stage.artifactIds.push(artifact.id);
       stage.status = "completed";
       await this.save(run, stage);
-      if (artifact.type === "source-change") {
-        const content = artifact.content as {
-          revision: string;
-          changeKind: "source" | "test" | "documentation";
-        };
-        run.revision = content.revision;
+      telemetry.info("stage.completed", {
+        artifactType: artifact.type,
+        revision: artifact.sourceRevision,
+      });
+      telemetry.increment("agent_factory_stage_completed", 1, { kind: "agent" });
+      if (revisionChangeKind) {
+        run.revision = sourceRevision;
         const artifacts = await this.repositories.artifacts.list(run.id);
         await this.repositories.artifacts.replace(
           run.id,
           invalidateArtifacts(
             artifacts.filter((x) => x.id !== artifact.id),
-            content.changeKind,
+            revisionChangeKind,
             run.revision,
           ).concat(artifact),
         );
@@ -290,26 +538,137 @@ export class WorkflowEngine {
   }
   private async qualityGate(run: WorkflowRun, stage: StageRun): Promise<void> {
     const artifacts = await this.repositories.artifacts.list(run.id);
-    const review = [...artifacts]
-      .reverse()
-      .find(
-        (x) => x.type === "code-review" && x.validation.valid && x.sourceRevision === run.revision,
+    stage.attempts++;
+    const configuredTypes = this.stageDefinition(stage).inputArtifacts;
+    const requiredTypes = configuredTypes.length ? configuredTypes : ["code-review"];
+    const selected = new Map<string, ArtifactInstance>();
+    const missingArtifactTypes: string[] = [];
+    const invalidArtifactTypes: string[] = [];
+    for (const type of requiredTypes) {
+      const candidates = artifacts.filter((artifact) => artifact.type === type);
+      const current = [...candidates]
+        .reverse()
+        .find((artifact) => artifact.validation.valid && artifact.sourceRevision === run.revision);
+      if (current) selected.set(type, current);
+      else if (!candidates.length) missingArtifactTypes.push(type);
+      else invalidArtifactTypes.push(type);
+    }
+    const findings = [...selected.values()].flatMap((artifact) => {
+      const content = artifact.content as { findings?: Finding[] };
+      return content.findings ?? [];
+    });
+    const blockingFingerprints = findings
+      .filter(
+        (finding) =>
+          !finding.resolved && new Set(["medium", "high", "critical"]).has(finding.severity),
+      )
+      .map((finding) => finding.fingerprint);
+    const failedEvidence: string[] = [];
+    const testReport = selected.get("test-report")?.content as { passed?: boolean } | undefined;
+    const commandReport = selected.get("command-report")?.content as
+      { passed?: boolean; commands?: CommandEvidence[] } | undefined;
+    const securityReview = selected.get("security-review")?.content as
+      { approved?: boolean } | undefined;
+    const qaReport = selected.get("qa-report")?.content as { passed?: boolean } | undefined;
+    const codeReview = selected.get("code-review")?.content as { approved?: boolean } | undefined;
+    if (testReport && !testReport.passed) failedEvidence.push("test-report-failed");
+    if (commandReport && !commandReport.passed)
+      failedEvidence.push(
+        ...(commandReport.commands ?? [])
+          .filter((command) => !command.passed)
+          .map((command) => `command-${command.commandId}-failed`),
       );
-    const passed = Boolean((review?.content as { approved?: boolean } | undefined)?.approved);
+    if (securityReview && !securityReview.approved) failedEvidence.push("security-review-failed");
+    if (qaReport && !qaReport.passed) failedEvidence.push("qa-report-failed");
+    if (codeReview && !codeReview.approved) failedEvidence.push("code-review-failed");
+    blockingFingerprints.push(...failedEvidence);
+    const passed =
+      !missingArtifactTypes.length && !invalidArtifactTypes.length && !blockingFingerprints.length;
+    const gateArtifact = this.createArtifact(
+      "quality-gate",
+      stage.stageId,
+      "tool",
+      "quality-gate",
+      run.revision,
+      {
+        revision: run.revision,
+        passed,
+        missingArtifactTypes,
+        invalidArtifactTypes,
+        blockingFingerprints: [...new Set(blockingFingerprints)],
+      },
+      [...selected.values()].map((artifact) => artifact.id),
+    );
+    await this.repositories.artifacts.save(run.id, gateArtifact);
+    stage.artifactIds.push(gateArtifact.id);
     if (passed) {
       stage.status = "completed";
+      await this.save(run, stage);
+      const currentArtifacts = await this.repositories.artifacts.list(run.id);
+      const allFindings = currentArtifacts.flatMap((artifact) => {
+        const content = artifact.content as { findings?: Finding[] };
+        return content.findings ?? [];
+      });
+      const commands = currentArtifacts.flatMap((artifact) =>
+        artifact.type === "command-report"
+          ? ((artifact.content as { commands: CommandEvidence[] }).commands ?? [])
+          : [],
+      );
+      const report = this.createArtifact(
+        "final-report",
+        stage.stageId,
+        "tool",
+        "workflow-engine",
+        run.revision,
+        {
+          branch: run.workspace?.branch ?? "unassigned",
+          worktree: run.workspace?.root ?? ".",
+          revision: run.revision,
+          artifactIds: currentArtifacts.map((artifact) => artifact.id),
+          findings: allFindings,
+          commands,
+          retries: { remediation: run.remediationAttempts },
+          outcome: this.definition.completionStatus,
+        },
+        [gateArtifact.id],
+      );
+      await this.repositories.artifacts.save(run.id, report);
+      stage.artifactIds.push(report.id);
       await this.save(run, stage);
       return;
     }
     run.remediationAttempts++;
-    if (run.remediationAttempts > this.definition.policy.maximumTotalRemediationAttempts)
+    if (run.remediationAttempts > this.policyFor(run).maximumTotalRemediationAttempts)
       return await this.escalate(run, stage, "Remediation budget exceeded");
-    const construction = run.stageRuns.find((x) => x.stageId === "construction")!;
-    const test = run.stageRuns.find((x) => x.stageId === "test")!;
-    const codeReview = run.stageRuns.find((x) => x.stageId === "code-review")!;
-    const fingerprints = (
-      (review?.content as { findings?: Array<{ fingerprint: string }> } | undefined)?.findings ?? []
-    ).map((x) => x.fingerprint);
+    const syntheticFindings: Finding[] = [
+      ...missingArtifactTypes.map((type) =>
+        this.gateFinding(
+          run.revision,
+          `missing-${type}`,
+          `Missing ${type}`,
+          "Required evidence is absent",
+        ),
+      ),
+      ...invalidArtifactTypes.map((type) =>
+        this.gateFinding(
+          run.revision,
+          `invalid-${type}`,
+          `Invalid ${type}`,
+          "Evidence is invalid or bound to a stale revision",
+        ),
+      ),
+      ...failedEvidence.map((fingerprint) =>
+        this.gateFinding(run.revision, fingerprint, "Quality check failed", fingerprint),
+      ),
+    ];
+    const remediationFindings = [...findings, ...syntheticFindings];
+    const fingerprints = [
+      ...new Set([
+        ...blockingFingerprints,
+        ...missingArtifactTypes.map((type) => `missing-${type}`),
+        ...invalidArtifactTypes.map((type) => `invalid-${type}`),
+      ]),
+    ];
     const prior = artifacts
       .filter((x) => x.type === "remediation-request")
       .flatMap((x) => (x.content as { findingFingerprints: string[] }).findingFingerprints);
@@ -324,27 +683,60 @@ export class WorkflowEngine {
         "quality-gate",
         run.revision,
         {
+          revision: run.revision,
+          findings: remediationFindings,
           findingFingerprints: fingerprints.length ? fingerprints : ["review-failed"],
-          guidance: "Construction agent must address review findings",
+          guidance: "Construction agent must address every blocking quality-gate finding",
         },
-        review ? [review.id] : [],
+        [gateArtifact.id],
       ),
     );
-    construction.status = "pending";
-    test.status = "pending";
-    codeReview.status = "pending";
-    stage.status = "pending";
-    await Promise.all([
-      this.save(run, construction),
-      this.save(run, test),
-      this.save(run, codeReview),
-      this.save(run, stage),
-    ]);
+    const constructionIndex = this.definition.stages.findIndex(
+      (definition) => definition.id === "construction",
+    );
+    const gateIndex = this.definition.stages.findIndex(
+      (definition) => definition.id === stage.stageId,
+    );
+    const rerunIds = new Set(
+      this.definition.stages
+        .slice(constructionIndex, gateIndex + 1)
+        .filter((definition) => definition.kind !== "approval")
+        .map((definition) => definition.id),
+    );
+    const rerunStages = run.stageRuns.filter((candidate) => rerunIds.has(candidate.stageId));
+    for (const rerun of rerunStages) {
+      rerun.status = "pending";
+      await this.save(run, rerun);
+    }
+  }
+  private gateFinding(
+    revision: string,
+    fingerprint: string,
+    title: string,
+    description: string,
+  ): Finding {
+    return {
+      id: `finding-${randomUUID()}`,
+      severity: "high",
+      title,
+      description,
+      evidence: description,
+      sourceLocation: { path: "workflow:quality-gate" },
+      revision,
+      fingerprint,
+      resolved: false,
+    };
   }
   private async escalate(run: WorkflowRun, stage: StageRun, reason: string): Promise<void> {
     stage.status = "failed";
     run.status = "escalated";
     run.escalationReason = reason;
+    const telemetry = this.observability.scope({
+      workflowRunId: run.id,
+      stageId: stage.stageId,
+    });
+    telemetry.error("workflow.escalated", { reason });
+    telemetry.increment("agent_factory_workflow_escalated");
     await this.save(run, stage);
   }
   private createArtifact(
@@ -369,6 +761,11 @@ export class WorkflowEngine {
       content,
       sourceRevision: revision,
     };
+  }
+  private policyFor(run: WorkflowRun): WorkflowDefinition["policy"] {
+    if (run.configuration?.policy === "strict")
+      return { maximumAttemptsPerStage: 1, maximumTotalRemediationAttempts: 2 };
+    return this.definition.policy;
   }
   private async save(run: WorkflowRun, stage: StageRun) {
     await this.repositories.stageRuns.save(run.id, stage);

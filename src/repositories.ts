@@ -10,9 +10,24 @@ import type {
 import { createRequire } from "node:module";
 import type { DatabaseSync, DatabaseSync as DatabaseSyncConstructor } from "node:sqlite";
 
+export interface ExternalEventRecord {
+  key: string;
+  workflowRunId: string;
+  kind: string;
+  receivedAt: string;
+  payload: unknown;
+}
+
+export interface IntegrationCursor {
+  scope: string;
+  cursor: string;
+  updatedAt: string;
+}
+
 export interface FactoryRepositories {
   workflowRuns: {
     get(id: string): Promise<WorkflowRun | undefined>;
+    list(): Promise<WorkflowRun[]>;
     save(run: WorkflowRun): Promise<void>;
   };
   stageRuns: {
@@ -33,6 +48,15 @@ export interface FactoryRepositories {
     save(approval: ApprovalRequest): Promise<void>;
     list(workflowRunId: string): Promise<ApprovalRequest[]>;
   };
+  externalEvents: {
+    has(key: string): Promise<boolean>;
+    append(event: ExternalEventRecord): Promise<void>;
+    list(workflowRunId: string): Promise<ExternalEventRecord[]>;
+  };
+  integrationCursors: {
+    get(scope: string): Promise<IntegrationCursor | undefined>;
+    save(cursor: IntegrationCursor): Promise<void>;
+  };
   agents: {
     get(id: string): Promise<AgentDefinition | undefined>;
     put(agent: AgentDefinition): Promise<void>;
@@ -51,8 +75,11 @@ export class InMemoryRepositories implements FactoryRepositories {
   private approvalLog = new Map<string, ApprovalRequest>();
   private agentLog = new Map<string, AgentDefinition>();
   private skillLog = new Map<string, SkillDefinition>();
+  private externalEventLog = new Map<string, ExternalEventRecord>();
+  private cursorLog = new Map<string, IntegrationCursor>();
   workflowRuns = {
     get: async (id: string) => this.runs.get(id),
+    list: async () => structuredClone([...this.runs.values()]),
     save: async (run: WorkflowRun) => {
       this.runs.set(run.id, structuredClone(run));
     },
@@ -72,7 +99,11 @@ export class InMemoryRepositories implements FactoryRepositories {
   };
   artifacts = {
     save: async (id: string, artifact: ArtifactInstance) => {
-      this.artifactLog.set(id, [...(this.artifactLog.get(id) ?? []), structuredClone(artifact)]);
+      const artifacts = this.artifactLog.get(id) ?? [];
+      this.artifactLog.set(id, [
+        ...artifacts.filter((candidate) => candidate.id !== artifact.id),
+        structuredClone(artifact),
+      ]);
     },
     list: async (id: string) => structuredClone(this.artifactLog.get(id) ?? []),
     replace: async (id: string, artifacts: ArtifactInstance[]) => {
@@ -86,6 +117,23 @@ export class InMemoryRepositories implements FactoryRepositories {
     },
     list: async (id: string) =>
       structuredClone([...this.approvalLog.values()].filter((x) => x.workflowRunId === id)),
+  };
+  externalEvents = {
+    has: async (key: string) => this.externalEventLog.has(key),
+    append: async (event: ExternalEventRecord) => {
+      if (!this.externalEventLog.has(event.key))
+        this.externalEventLog.set(event.key, structuredClone(event));
+    },
+    list: async (id: string) =>
+      structuredClone(
+        [...this.externalEventLog.values()].filter((event) => event.workflowRunId === id),
+      ),
+  };
+  integrationCursors = {
+    get: async (scope: string) => this.cursorLog.get(scope),
+    save: async (cursor: IntegrationCursor) => {
+      this.cursorLog.set(cursor.scope, structuredClone(cursor));
+    },
   };
   agents = {
     get: async (id: string) => this.agentLog.get(id),
@@ -135,9 +183,14 @@ export class SqliteRepositories implements FactoryRepositories {
       );
       CREATE TABLE IF NOT EXISTS agents (id TEXT PRIMARY KEY, value TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS skills (id TEXT PRIMARY KEY, value TEXT NOT NULL);
+      CREATE TABLE IF NOT EXISTS external_events (
+        key TEXT PRIMARY KEY, workflow_run_id TEXT NOT NULL, value TEXT NOT NULL
+      );
+      CREATE TABLE IF NOT EXISTS integration_cursors (scope TEXT PRIMARY KEY, value TEXT NOT NULL);
       CREATE INDEX IF NOT EXISTS events_by_run ON events(workflow_run_id, sequence);
       CREATE INDEX IF NOT EXISTS artifacts_by_run ON artifacts(workflow_run_id, sequence);
       CREATE INDEX IF NOT EXISTS approvals_by_run ON approvals(workflow_run_id);
+      CREATE INDEX IF NOT EXISTS external_events_by_run ON external_events(workflow_run_id);
     `);
   }
 
@@ -175,6 +228,12 @@ export class SqliteRepositories implements FactoryRepositories {
 
   workflowRuns = {
     get: async (id: string) => this.get<WorkflowRun>("workflow_runs", id),
+    list: async () =>
+      (
+        this.database.prepare("SELECT value FROM workflow_runs ORDER BY rowid").all() as Array<{
+          value: string;
+        }>
+      ).map((row) => JSON.parse(row.value) as WorkflowRun),
     save: async (run: WorkflowRun) => this.put("workflow_runs", run.id, run),
   };
   stageRuns = {
@@ -256,6 +315,43 @@ export class SqliteRepositories implements FactoryRepositories {
           .prepare("SELECT value FROM approvals WHERE workflow_run_id = ? ORDER BY rowid")
           .all(id) as Array<{ value: string }>
       ).map((row) => JSON.parse(row.value) as ApprovalRequest),
+  };
+  externalEvents = {
+    has: async (key: string) =>
+      Boolean(this.database.prepare("SELECT 1 FROM external_events WHERE key = ?").get(key)),
+    append: async (event: ExternalEventRecord) => {
+      this.transaction(() => {
+        this.database
+          .prepare(
+            "INSERT OR IGNORE INTO external_events (key, workflow_run_id, value) VALUES (?, ?, ?)",
+          )
+          .run(event.key, event.workflowRunId, JSON.stringify(event));
+      });
+    },
+    list: async (id: string) =>
+      (
+        this.database
+          .prepare("SELECT value FROM external_events WHERE workflow_run_id = ? ORDER BY rowid")
+          .all(id) as Array<{ value: string }>
+      ).map((row) => JSON.parse(row.value) as ExternalEventRecord),
+  };
+  integrationCursors = {
+    get: async (scope: string) => {
+      const row = this.database
+        .prepare("SELECT value FROM integration_cursors WHERE scope = ?")
+        .get(scope) as { value: string } | undefined;
+      return row ? (JSON.parse(row.value) as IntegrationCursor) : undefined;
+    },
+    save: async (cursor: IntegrationCursor) => {
+      this.transaction(() => {
+        this.database
+          .prepare(
+            `INSERT INTO integration_cursors (scope, value) VALUES (?, ?)
+             ON CONFLICT(scope) DO UPDATE SET value = excluded.value`,
+          )
+          .run(cursor.scope, JSON.stringify(cursor));
+      });
+    },
   };
   agents = {
     get: async (id: string) => this.get<AgentDefinition>("agents", id),

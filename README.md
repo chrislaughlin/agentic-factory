@@ -30,7 +30,7 @@ flowchart LR
 - **Event**: normalized, append-only execution evidence.
 - **Artifact**: validated, lineage-bearing stage output bound to a source revision.
 
-The complete target lifecycle (planning through post-deployment verification and rollback) is represented by the domain vocabulary. The first executable workflow deliberately proves the smaller planning → approval → construction → test → independent review → quality-gate slice, including remediation.
+The executable lifecycle covers planning, approval, isolated construction, test authoring, deterministic checks, parallel security/QA/code review, remediation, pull request and CI/review monitoring, final approval, expected-head merge, deployment observation, smoke verification, rollback, and terminal reporting.
 
 ## Repository structure
 
@@ -39,6 +39,10 @@ The complete target lifecycle (planning through post-deployment verification and
 | `src/domain.ts`             | Provider-neutral schemas and types                                  |
 | `src/workflow.ts`           | Dependency scheduler, approval, remediation, retries, writer lock   |
 | `src/harness.ts`            | Adapter contract, negotiation, scripted adapter, external scaffolds |
+| `src/infrastructure.ts`     | Isolated Git worktrees and allowlisted command execution            |
+| `src/github.ts`             | PR publication, CI/review monitor, GitHub CLI provider              |
+| `src/release.ts`            | Final approval, merge, deployment, smoke checks, rollback           |
+| `src/observability.ts`      | Correlated structured logs, metrics, and secret redaction           |
 | `src/artifacts.ts`          | Artifact validation and explicit invalidation rules                 |
 | `src/repositories.ts`       | Persistence interfaces and in-memory implementation                 |
 | `.agent-factory/agents/`    | Canonical agent definitions                                         |
@@ -46,20 +50,20 @@ The complete target lifecycle (planning through post-deployment verification and
 | `.agents/skills/`           | Canonical, harness-neutral skills                                   |
 | `examples/`                 | Runnable input                                                      |
 
-## Run the vertical slice
+## Operate the workflow
 
 Requires Node.js 22+ and pnpm.
 
 ```bash
 pnpm install
-pnpm agent-factory run examples/work-items/example.yaml
-# Use the printed approval and run identifiers in a later process:
-pnpm agent-factory approve <approval-id> local-human
-pnpm agent-factory status <run-id>
+pnpm agent-factory doctor
+pnpm agent-factory work "Implement the requested change" --json
+pnpm agent-factory approve <plan-approval-id> --actor local-human --json
+pnpm agent-factory inspect <run-id>
 pnpm validate
 ```
 
-The local command uses the deterministic scripted adapter and a transactional SQLite database at `.agent-factory/factory.db`. It prints the durable run and approval identifiers, then exits. The `approve` command can resume the workflow in a later process; the scripted review fails once, remediates through construction, invalidates old evidence, and completes on its second attempt. Pass `--database <path>` to any command to use a different database.
+The default local backend uses an isolated Git worktree, a deterministic scripted agent adapter, real allowlisted validation commands, and transactional SQLite at `.agent-factory/factory.db`. It pauses durably at human gates; the demonstration intentionally fails its first review, remediates, invalidates old evidence, and reaches `locally-verified`. Pass `--database <path>` to use another database. See [Operator guide](docs/operator-guide.md) for PR, CI, final approval, deployment, recovery, and scripting details.
 
 ## Creating definitions
 
@@ -85,8 +89,12 @@ Canonical files in `.agent-factory/agents` and `.agents/skills` are the source o
 
 All definitions, prompts, repository content, tool output, and review comments are untrusted. Zod validates boundaries; definition loading confines real paths; permissions deny filesystem/network access by default; commands are represented as executable plus arguments and require allowlisting; artifacts and reviews are revision-bound. A production tool service must additionally sandbox processes, redact secrets before persistence, and authorize every requested operation against the task envelope.
 
-## Known limitations / next phases
+## Known limitations
 
-The CLI persistence implementation is local SQLite; distributed leases and encrypted persistent audit storage remain future work. Codex, Claude Code, and OpenCode invocation/cancellation are honest scaffolds, not production integrations. Branch/worktree tooling, parallel read-only verification, Git hosting, event-driven CI/review monitors, deployment/rollback, and budgets are intentionally deferred behind the existing interfaces.
+- SQLite and file locks target one local operator host; distributed scheduling and leases are not implemented.
+- `ProcessHarnessAdapter` is the production-capable local NDJSON harness. Codex, Claude Code, and OpenCode adapters truthfully expose configuration/capability contracts but still reject invocation until a deployment supplies their process/API bridge.
+- GitHub integration uses authenticated `git` and `gh`; monitoring is restart-safe one-shot polling intended for an external scheduler, not an always-on daemon.
+- The initial deployment provider runs explicitly configured local commands and stores state locally. Cloud-specific deployment discovery requires another `DeploymentProvider` implementation.
+- Automatic rollback occurs only when an allowlisted rollback command is configured; otherwise failure escalates to a human.
 
-Recommended next work: (1) add a resumable API around the SQLite repository, (2) implement one real harness adapter and sandboxed deterministic tool service with secret redaction, and (3) extend the workflow with parallel security/QA review and event-driven Git/CI/deployment services.
+Release evidence and the supported surface are recorded in the [release checklist](docs/release-checklist.md), [compatibility matrix](docs/compatibility-matrix.md), and [end-to-end evidence](docs/e2e-evidence.md).

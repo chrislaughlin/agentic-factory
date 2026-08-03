@@ -2,6 +2,7 @@
   "name": "agentic-factory",
   "version": "0.1.0",
   "private": true,
+  "packageManager": "pnpm@11.1.3",
   "type": "module",
   "bin": {
     "agent-factory": "dist/cli.js"
@@ -13,7 +14,8 @@
     "test": "vitest run",
     "lint": "eslint .",
     "format:check": "prettier --check .",
-    "validate": "pnpm lint && pnpm typecheck && pnpm test && pnpm build && pnpm format:check"
+    "security": "pnpm audit --prod --audit-level high",
+    "validate": "pnpm lint && pnpm typecheck && pnpm test && pnpm build && pnpm format:check && pnpm security"
   },
   "engines": {
     "node": ">=22"
