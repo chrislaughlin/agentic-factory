@@ -248,6 +248,43 @@ describe("real local SDLC", () => {
     });
   });
 
+  it("limits and redacts the process harness environment", async () => {
+    const harness = new ProcessHarnessAdapter({
+      executable: process.execPath,
+      arguments: [
+        "-e",
+        "console.error(process.env.HARNESS_TOKEN + ':' + (process.env.HOME ?? 'missing')); process.exit(1)",
+      ],
+      environment: { HARNESS_TOKEN: "harness-secret" },
+    });
+    const config = await harness.materialize({
+      agent,
+      skills: [skill],
+      modelProfile: profile,
+      destination: ".",
+    });
+
+    const events = harness.run({
+      runId: "stage-secret",
+      config,
+      task: {
+        taskId: "task-secret",
+        workflowRunId: "workflow-secret",
+        stageId: "planning",
+        agentId: "planner",
+        objective: "Do not leak",
+        requiredSkills: ["planning"],
+        optionalSkills: [],
+        workspace: { root: ".", revision: "abc123" },
+        inputs: [],
+        expectedOutput: { type: "implementation-plan", version: "v1" },
+        permissions: { filesystem: "read-only", network: "deny", commands: [] },
+        metadata: {},
+      },
+    });
+    await expect(events[Symbol.asyncIterator]().next()).rejects.toThrow("[REDACTED]:missing");
+  });
+
   it("executes only configured deterministic commands and redacts sensitive output", async () => {
     const runner = new DeterministicCommandRunner({
       commands: [

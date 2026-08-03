@@ -1,4 +1,4 @@
-import { execFile, spawn } from "node:child_process";
+import { execFile, spawn, type ChildProcess } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import {
   lstat,
@@ -20,6 +20,7 @@ export interface AllowedCommand {
   executable: string;
   arguments: string[];
   timeoutMilliseconds?: number;
+  terminationGraceMilliseconds?: number;
 }
 
 export interface CommandEvidence {
@@ -86,6 +87,7 @@ export class DeterministicCommandRunner {
     const child = spawn(command.executable, command.arguments, {
       cwd: input.cwd,
       env: { ...safeEnvironment, ...this.environment, ...invocationEnvironment },
+      detached: process.platform !== "win32",
       stdio: ["ignore", "pipe", "pipe"],
     });
     child.stdout.setEncoding("utf8");
@@ -93,19 +95,28 @@ export class DeterministicCommandRunner {
     let stdout = "";
     let stderr = "";
     let timedOut = false;
+    let forceKill: NodeJS.Timeout | undefined;
     child.stdout.on("data", (chunk: string) => (stdout += chunk));
     child.stderr.on("data", (chunk: string) => (stderr += chunk));
     const timeout = setTimeout(
       () => {
         timedOut = true;
-        child.kill("SIGTERM");
+        terminateCommand(child, "SIGTERM");
+        forceKill = setTimeout(
+          () => terminateCommand(child, "SIGKILL"),
+          command.terminationGraceMilliseconds ?? 1_000,
+        );
+        forceKill.unref();
       },
       command.timeoutMilliseconds ?? 15 * 60_000,
     );
     const exitCode = await new Promise<number | null>((resolve, reject) => {
       child.once("error", reject);
       child.once("close", resolve);
-    }).finally(() => clearTimeout(timeout));
+    }).finally(() => {
+      clearTimeout(timeout);
+      if (forceKill) clearTimeout(forceKill);
+    });
     const invocationSecrets = Object.entries(invocationEnvironment)
       .filter(([name]) => /(token|secret|password|credential|private.?key|api.?key)/iu.test(name))
       .map(([, value]) => value)
@@ -133,6 +144,18 @@ export class DeterministicCommandRunner {
   }
 }
 
+function terminateCommand(child: ChildProcess, signal: NodeJS.Signals): void {
+  if (child.pid && process.platform !== "win32") {
+    try {
+      process.kill(-child.pid, signal);
+      return;
+    } catch {
+      // Fall back to the direct process if its group has already exited.
+    }
+  }
+  child.kill(signal);
+}
+
 export interface IsolatedWorkspace {
   root: string;
   branch: string;
@@ -145,12 +168,20 @@ export class WorkspaceLockedError extends Error {
 
 export interface WorkspaceRevisionProvider {
   currentRevision(root: string): Promise<string>;
+  isClean(root: string): Promise<boolean>;
 }
 
 export class GitWorkspaceRevisionProvider implements WorkspaceRevisionProvider {
   async currentRevision(root: string): Promise<string> {
     const { stdout } = await execute("git", ["rev-parse", "HEAD"], { cwd: root });
     return stdout.trim();
+  }
+
+  async isClean(root: string): Promise<boolean> {
+    const { stdout } = await execute("git", ["status", "--porcelain=v1", "--untracked-files=all"], {
+      cwd: root,
+    });
+    return stdout.trim().length === 0;
   }
 }
 

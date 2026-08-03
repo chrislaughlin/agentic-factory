@@ -159,12 +159,26 @@ export type FeedbackClassification =
 
 export type FeedbackTriage = (event: GitHubEvent) => Promise<FeedbackClassification>;
 
+/** Resolves otherwise ambiguous PR comments conservatively without leaving a run deadlocked. */
+export const conservativeFeedbackTriage: FeedbackTriage = async (event) => {
+  if (event.kind !== "review") return "non-actionable";
+  const body = event.body.trim();
+  if (/\b(flaky|intermittent|rerun)\b/iu.test(body)) return "flaky";
+  if (/\b(infrastructure|runner|service unavailable|network timeout)\b/iu.test(body))
+    return "infrastructure";
+  if (/\b(duplicate|already addressed|superseded)\b/iu.test(body)) return "duplicate";
+  if (!body || /^(lgtm|approved|thanks|thank you|looks good)[.!\s]*$/iu.test(body))
+    return "non-actionable";
+  return "actionable";
+};
+
 export class GitHubLifecycle {
   constructor(
     private readonly repositories: FactoryRepositories,
     private readonly provider: GitHubProvider,
     private readonly git: GitRepositoryGateway,
-    private readonly triage?: FeedbackTriage,
+    private readonly triage: FeedbackTriage = conservativeFeedbackTriage,
+    private readonly maximumExternalRemediationAttempts = 8,
   ) {}
 
   async publish(
@@ -242,16 +256,25 @@ export class GitHubLifecycle {
     let processed = 0;
     let duplicates = 0;
     let headChanged = false;
+    const batchKeys = new Set<string>();
+    const pendingEventRecords: Array<{
+      key: string;
+      workflowRunId: string;
+      kind: string;
+      receivedAt: string;
+      payload: GitHubEvent;
+    }> = [];
     const actionable: Array<{
       event: Exclude<GitHubEvent, { kind: "head-changed" }>;
       classification: FeedbackClassification;
     }> = [];
     for (const event of polled.events) {
-      if (await this.repositories.externalEvents.has(event.key)) {
+      if (batchKeys.has(event.key) || (await this.repositories.externalEvents.has(event.key))) {
         duplicates++;
         continue;
       }
-      await this.repositories.externalEvents.append({
+      batchKeys.add(event.key);
+      pendingEventRecords.push({
         key: event.key,
         workflowRunId: run.id,
         kind: event.kind,
@@ -274,16 +297,10 @@ export class GitHubLifecycle {
         continue;
       }
       let classification = classifyFeedback(event, run.revision);
-      if (classification === "reasoning-required" && this.triage)
-        classification = await this.triage(event);
+      if (classification === "reasoning-required") classification = await this.triage(event);
       await this.persistFeedback(run, event, classification);
       if (classification === "actionable") actionable.push({ event, classification });
     }
-    await this.repositories.integrationCursors.save({
-      scope,
-      cursor: polled.cursor,
-      updatedAt: new Date().toISOString(),
-    });
     const currentArtifacts = await this.repositories.artifacts.list(run.id);
     const currentCi = currentArtifacts.filter(
       (artifact) =>
@@ -319,29 +336,45 @@ export class GitHubLifecycle {
       !hasUnresolvedRequest &&
       !hasPendingTriage;
     if (actionable.length) {
-      const findings = actionable.map(({ event }) => feedbackFinding(event));
-      await this.repositories.artifacts.save(
-        run.id,
-        artifact(
-          `github-remediation-${actionable.map(({ event }) => safeId(event.key)).join("-")}`,
-          "remediation-request",
-          "github-monitor",
-          run.revision,
-          {
-            revision: run.revision,
-            findings,
-            findingFingerprints: findings.map((finding) => finding.fingerprint),
-            guidance:
-              "Address actionable GitHub CI and review feedback, then publish a new revision",
-          },
-        ),
+      const remediationId = `github-remediation-${actionable
+        .map(({ event }) => safeId(event.key))
+        .join("-")}`;
+      const existingRemediation = currentArtifacts.some(
+        (artifact) => artifact.id === remediationId && artifact.validation.valid,
       );
-      resetLocalVerificationStages(run);
-      run.status = "running";
+      if (!existingRemediation) {
+        run.remediationAttempts++;
+        if (run.remediationAttempts > this.maximumExternalRemediationAttempts) {
+          run.status = "escalated";
+          run.escalationReason = "External remediation budget exceeded";
+        } else {
+          const findings = actionable.map(({ event }) => feedbackFinding(event));
+          await this.repositories.artifacts.save(
+            run.id,
+            artifact(remediationId, "remediation-request", "github-monitor", run.revision, {
+              revision: run.revision,
+              findings,
+              findingFingerprints: findings.map((finding) => finding.fingerprint),
+              guidance:
+                "Address actionable GitHub CI and review feedback, then publish a new revision",
+            }),
+          );
+        }
+      }
+      if (run.status !== "escalated") {
+        resetLocalVerificationStages(run);
+        run.status = "running";
+      }
     } else if (!headChanged && (processed || readyForFinalApproval)) {
       run.status = "waiting-review";
     }
     await this.repositories.workflowRuns.save(run);
+    for (const record of pendingEventRecords) await this.repositories.externalEvents.append(record);
+    await this.repositories.integrationCursors.save({
+      scope,
+      cursor: polled.cursor,
+      updatedAt: new Date().toISOString(),
+    });
     return {
       processed,
       duplicates,
@@ -759,8 +792,9 @@ export class GhCliGitHubProvider implements GitHubProvider {
     const [owner, name] = repository.split("/");
     if (!owner || !name) return [];
     const query = `query($owner:String!,$name:String!,$number:Int!){repository(owner:$owner,name:$name){pullRequest(number:$number){reviewThreads(first:100){nodes{id,isResolved,comments(first:1){nodes{body author{login} path line commit{oid}}}}}}}}`;
+    let stdout: string;
     try {
-      const { stdout } = await execute("gh", [
+      ({ stdout } = await execute("gh", [
         "api",
         "graphql",
         "-f",
@@ -771,46 +805,52 @@ export class GhCliGitHubProvider implements GitHubProvider {
         `name=${name}`,
         "-F",
         `number=${number}`,
-      ]);
-      const nodes = (
-        JSON.parse(stdout) as {
-          data: {
-            repository: {
-              pullRequest: {
-                reviewThreads: {
-                  nodes: Array<{
-                    id: string;
-                    isResolved: boolean;
-                    comments: {
-                      nodes: Array<{
-                        body: string;
-                        author: { login: string };
-                        commit?: { oid: string };
-                      }>;
-                    };
-                  }>;
-                };
-              };
-            };
-          };
-        }
-      ).data.repository.pullRequest.reviewThreads.nodes;
-      return nodes.map((thread) => {
-        const comment = thread.comments.nodes[0];
-        return {
-          key: `thread-${thread.id}-${thread.isResolved ? "resolved" : "open"}`,
-          kind: "review" as const,
-          revision: comment?.commit?.oid ?? revision,
-          reviewKind: "inline-thread" as const,
-          body: comment?.body ?? "Inline review thread",
-          author: comment?.author.login ?? "unknown",
-          threadId: thread.id,
-          resolved: thread.isResolved,
-        };
-      });
-    } catch {
-      return [];
+      ]));
+    } catch (error) {
+      throw new Error(
+        `Failed to retrieve review threads: ${error instanceof Error ? error.message : String(error)}`,
+      );
     }
+    const nodes = z
+      .object({
+        data: z.object({
+          repository: z.object({
+            pullRequest: z.object({
+              reviewThreads: z.object({
+                nodes: z.array(
+                  z.object({
+                    id: z.string(),
+                    isResolved: z.boolean(),
+                    comments: z.object({
+                      nodes: z.array(
+                        z.object({
+                          body: z.string(),
+                          author: z.object({ login: z.string() }).nullable(),
+                          commit: z.object({ oid: z.string() }).nullable().optional(),
+                        }),
+                      ),
+                    }),
+                  }),
+                ),
+              }),
+            }),
+          }),
+        }),
+      })
+      .parse(JSON.parse(stdout)).data.repository.pullRequest.reviewThreads.nodes;
+    return nodes.map((thread) => {
+      const comment = thread.comments.nodes[0];
+      return {
+        key: `thread-${thread.id}-${thread.isResolved ? "resolved" : "open"}`,
+        kind: "review" as const,
+        revision: comment?.commit?.oid ?? revision,
+        reviewKind: "inline-thread" as const,
+        body: comment?.body ?? "Inline review thread",
+        author: comment?.author?.login ?? "unknown",
+        threadId: thread.id,
+        resolved: thread.isResolved,
+      };
+    });
   }
 
   private async fetchFailedJobEvidence(

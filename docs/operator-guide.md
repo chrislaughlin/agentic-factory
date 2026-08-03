@@ -12,6 +12,7 @@ Deployment, smoke, and optional rollback commands are JSON arrays so no shell pa
 
 ```bash
 export AGENT_FACTORY_HARNESS_COMMAND='["./bin/my-ndjson-harness"]'
+export AGENT_FACTORY_HARNESS_ENVIRONMENT='{"OPENAI_API_KEY":"..."}'
 export AGENT_FACTORY_DEPLOY_COMMAND='["./scripts/deploy.sh","production"]'
 export AGENT_FACTORY_SMOKE_COMMAND='["./scripts/smoke.sh","https://service.example/health"]'
 export AGENT_FACTORY_ROLLBACK_COMMAND='["./scripts/rollback.sh","production"]'
@@ -19,7 +20,7 @@ export AGENT_FACTORY_ENVIRONMENT='production'
 export AGENT_FACTORY_MERGE_METHOD='squash'
 ```
 
-Commands are allowlisted as an executable plus fixed arguments. Credentials remain out-of-band; values in configured secret/token/password fields and registered secret literals are redacted before persistence.
+Commands are allowlisted as an executable plus fixed arguments. The harness inherits only a minimal process environment plus the explicit JSON object in `AGENT_FACTORY_HARNESS_ENVIRONMENT`; it does not receive the CLI's complete environment. Credentials remain out-of-band; values in configured secret/token/password fields and registered secret literals are redacted from process errors and structured logs before persistence.
 
 Without `AGENT_FACTORY_HARNESS_COMMAND`, the CLI uses the scripted demonstration harness and stops after local verification. Live source changes and PR publication require a configured process harness that edits/commits in `task.workspace.root` and reports the resulting Git SHA as its source revision.
 
@@ -28,7 +29,7 @@ The deploy command receives `AGENT_FACTORY_REVISION`, `AGENT_FACTORY_ENVIRONMENT
 ## Operate
 
 ```text
-agent-factory work "<request>" [--harness scripted] [--workflow local-sdlc] [--json]
+agent-factory work "<request>" [--harness scripted] [--workflow local-sdlc] [--model-profile balanced] [--policy default|strict] [--json]
 agent-factory list [--json]
 agent-factory inspect <run-id> [--json]
 agent-factory answer <request-id> --value "<answer>"

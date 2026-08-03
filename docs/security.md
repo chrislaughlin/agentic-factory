@@ -7,12 +7,13 @@
 - Canonical path loading resolves real paths beneath trusted roots; Git worktree/run IDs are restricted before filesystem operations.
 - Workspace writers are exclusive. Planning and independent reviewers remain read-only and run concurrently only against one revision.
 - Commands use fixed executable/argument tuples, bounded timeouts, a minimal environment, and redacted output. No shell evaluates command strings.
+- Process harnesses inherit only a minimal environment plus explicitly configured values. Harness and command process groups receive a forced-kill escalation after their graceful timeout, and sensitive configured values are redacted from errors and structured logs.
 - Plan and final approvals bind to a revision and evidence set. Merge rechecks the expected head SHA.
 - CI, review, deployment, and smoke evidence is revision-bound; new source revisions invalidate stale downstream artifacts.
 
 ## Credentials and logs
 
-Credentials are obtained out of band by GitHub CLI or deployment commands. They are not prompt inputs or schema fields. Structured observability redacts sensitive keys and configured literal secrets recursively. Operators must still avoid putting credentials in Git URLs, filenames, command arguments, or free-form issue text.
+Credentials are obtained out of band by GitHub CLI, explicitly configured harness environment values, or deployment commands. They are not prompt inputs or schema fields. Structured observability redacts sensitive keys and configured literal secrets recursively. Operators must still avoid putting credentials in Git URLs, filenames, command arguments, agent artifacts, or free-form issue text.
 
 ## Dependencies
 

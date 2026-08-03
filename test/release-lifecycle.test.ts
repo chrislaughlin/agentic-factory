@@ -205,6 +205,16 @@ describe("release lifecycle", () => {
     const evidence = await seedFinalGateEvidence(firstRepositories, run);
     const approval = await lifecycle.requestFinalApproval(run.id, evidence);
 
+    await expect(
+      lifecycle.approveAndDeploy(approval.id, "operator", {
+        repository: "example/project",
+        pullRequestNumber: 42,
+        mergeMethod: "squash",
+        environment: "production",
+        smokeCommandIds: [],
+      }),
+    ).rejects.toThrow("At least one post-deployment smoke command is required");
+
     run.revision = "head-2";
     await firstRepositories.workflowRuns.save(run);
     await expect(
@@ -264,7 +274,7 @@ describe("release lifecycle", () => {
       pullRequestNumber: 42,
       mergeMethod: "squash",
       environment: "production",
-      smokeCommandIds: [],
+      smokeCommandIds: ["smoke"],
     });
 
     const result = await lifecycle.observe(run.id);
@@ -339,7 +349,7 @@ describe("release lifecycle", () => {
         pullRequestNumber: 42,
         mergeMethod: "squash",
         environment: "production",
-        smokeCommandIds: [],
+        smokeCommandIds: ["smoke"],
       }),
     ).rejects.toThrow("head changed during merge");
 

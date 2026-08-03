@@ -148,6 +148,8 @@ export class ReleaseLifecycle {
     approver: string,
     options: ReleaseOptions,
   ): Promise<WorkflowRun> {
+    if (options.smokeCommandIds.length === 0)
+      throw new Error("At least one post-deployment smoke command is required");
     const approval = await this.repositories.approvals.get(approvalId);
     if (!approval || approval.status !== "pending" || approval.kind !== "final")
       throw new Error(`Pending final approval not found: ${approvalId}`);

@@ -11,7 +11,12 @@ import {
   type ArtifactInstance,
   type WorkflowRun,
 } from "./domain.js";
-import { GhCliGitHubProvider, GitHubLifecycle, LocalGitRepositoryGateway } from "./github.js";
+import {
+  conservativeFeedbackTriage,
+  GhCliGitHubProvider,
+  GitHubLifecycle,
+  LocalGitRepositoryGateway,
+} from "./github.js";
 import { ProcessHarnessAdapter, ScriptedHarnessAdapter, type HarnessAdapter } from "./harness.js";
 import {
   DeterministicCommandRunner,
@@ -20,6 +25,7 @@ import {
   type AllowedCommand,
 } from "./infrastructure.js";
 import { loadAgent, loadSkills, loadWorkflow } from "./loader.js";
+import { StructuredObservability } from "./observability.js";
 import { SqliteRepositories } from "./repositories.js";
 import { CommandDeploymentProvider, ReleaseLifecycle } from "./release.js";
 import { WorkflowEngine } from "./workflow.js";
@@ -167,15 +173,13 @@ export async function runCli(
         requireConfirmation(parsed, "reject");
         const approvalId = required(parsed.positionals[0], "reject requires an approval id");
         const reason = required(option(parsed.options, "reason"), "reject requires --reason");
-        output(
-          "ApprovalDecision",
-          await backend.reject(
-            approvalId,
-            option(parsed.options, "actor") ?? "local-operator",
-            reason,
-          ),
+        const data = await backend.reject(
+          approvalId,
+          option(parsed.options, "actor") ?? "local-operator",
+          reason,
         );
-        return CliExitCode.Success;
+        output("ApprovalDecision", data);
+        return exitForStatus(statusOf(data));
       }
       case "retry": {
         const runId = required(parsed.positionals[0], "retry requires a run id");
@@ -187,11 +191,12 @@ export async function runCli(
       case "cancel": {
         requireConfirmation(parsed, "cancel");
         const runId = required(parsed.positionals[0], "cancel requires a run id");
-        output(
-          "WorkflowControl",
-          await backend.cancel(runId, option(parsed.options, "reason") ?? "cancelled by operator"),
+        const data = await backend.cancel(
+          runId,
+          option(parsed.options, "reason") ?? "cancelled by operator",
         );
-        return CliExitCode.Success;
+        output("WorkflowControl", data);
+        return exitForStatus(statusOf(data));
       }
       case "resume": {
         const data = await backend.resume(
@@ -329,10 +334,12 @@ class LocalOperatorBackend implements OperatorBackend {
     for (const value of agents) await repositories.agents.put(value);
     for (const value of skills) await repositories.skills.put(value);
     const harnessCommand = configuredCommand("process-harness", "AGENT_FACTORY_HARNESS_COMMAND");
+    const harnessEnvironment = configuredEnvironment("AGENT_FACTORY_HARNESS_ENVIRONMENT");
     const harness: HarnessAdapter = harnessCommand
       ? new ProcessHarnessAdapter({
           executable: harnessCommand.executable,
           arguments: harnessCommand.arguments,
+          environment: harnessEnvironment,
         })
       : createScriptedHarness();
     const profile = ModelProfileSchema.parse({
@@ -358,6 +365,10 @@ class LocalOperatorBackend implements OperatorBackend {
         ...configuredCommands,
       ],
     });
+    const observability = new StructuredObservability({
+      sink: (line) => process.stderr.write(`${line}\n`),
+      secrets: Object.values(harnessEnvironment),
+    });
     const engine = new WorkflowEngine(
       repositories,
       harness,
@@ -367,6 +378,7 @@ class LocalOperatorBackend implements OperatorBackend {
       new Map([[profile.id, profile]]),
       commands,
       new GitWorkspaceRevisionProvider(),
+      observability,
     );
     return new LocalOperatorBackend(root, repositories, engine, commands, harness.id);
   }
@@ -384,6 +396,10 @@ class LocalOperatorBackend implements OperatorBackend {
       throw unavailable(`Harness is not configured: ${input.harness}`);
     if (input.workflow && input.workflow !== "local-sdlc")
       throw unavailable(`Workflow is not configured: ${input.workflow}`);
+    if (input.modelProfile && input.modelProfile !== "balanced")
+      throw unavailable(`Model profile is not configured: ${input.modelProfile}`);
+    if (input.policy && !new Set(["default", "strict"]).has(input.policy))
+      throw unavailable(`Policy is not configured: ${input.policy}`);
     const identity = await new LocalGitRepositoryGateway().detect(this.root);
     if (input.repository && input.repository !== identity.repository)
       throw unavailable(`Configured checkout is ${identity.repository}, not ${input.repository}`);
@@ -395,21 +411,21 @@ class LocalOperatorBackend implements OperatorBackend {
       baseBranch: input.baseBranch ?? identity.defaultBranch,
     });
     try {
-      const run = await this.engine.submit(
-        input.objective,
-        workspace.baseRevision,
-        workspace,
-        runId,
-      );
-      run.configuration = {
+      const configuration: NonNullable<WorkflowRun["configuration"]> = {
         harness: input.harness ?? this.harnessId,
         workflow: input.workflow ?? "local-sdlc",
         repository: identity.repository,
         baseBranch: input.baseBranch ?? identity.defaultBranch,
         modelProfile: input.modelProfile ?? "balanced",
-        ...(input.policy ? { policy: input.policy } : {}),
+        policy: input.policy ?? "default",
       };
-      await this.repositories.workflowRuns.save(run);
+      const run = await this.engine.submit(
+        input.objective,
+        workspace.baseRevision,
+        workspace,
+        runId,
+        configuration,
+      );
       const approval = (await this.repositories.approvals.list(run.id)).find(
         (candidate) => candidate.status === "pending",
       );
@@ -524,17 +540,12 @@ class LocalOperatorBackend implements OperatorBackend {
         throw unavailable(
           "The scripted harness is a local demonstration and cannot publish source changes; configure AGENT_FACTORY_HARNESS_COMMAND and submit with --harness process",
         );
-      await new GitHubLifecycle(
-        this.repositories,
-        new GhCliGitHubProvider(),
-        new LocalGitRepositoryGateway(),
-      ).publish(run.id, { title: run.objective, body: "Agent Factory local quality gate passed." });
+      await this.githubLifecycle(run).publish(run.id, {
+        title: run.objective,
+        body: "Agent Factory local quality gate passed.",
+      });
     } else if (run.status === "waiting-ci" || run.status === "waiting-review") {
-      const result = await new GitHubLifecycle(
-        this.repositories,
-        new GhCliGitHubProvider(),
-        new LocalGitRepositoryGateway(),
-      ).poll(run.id);
+      const result = await this.githubLifecycle(run).poll(run.id);
       run = (await this.engine.get(run.id))!;
       if (result.readyForFinalApproval) {
         const pendingFinal = (await this.repositories.approvals.list(run.id)).find(
@@ -551,6 +562,13 @@ class LocalOperatorBackend implements OperatorBackend {
       }
     } else if (run.status === "deploying" || run.status === "verifying") {
       run = await this.releaseLifecycle(run).observe(run.id);
+    } else if (run.status === "waiting-final-approval") {
+      // The durable approval is the only valid transition from this state.
+    } else if (run.status === "merging") {
+      run.status = "escalated";
+      run.escalationReason =
+        "Merge outcome is uncertain after restart; reconcile the pull request before retrying";
+      await this.repositories.workflowRuns.save(run);
     } else {
       run = await this.engine.resume(run.id);
     }
@@ -650,6 +668,16 @@ class LocalOperatorBackend implements OperatorBackend {
       new GhCliGitHubProvider(),
       deployment,
       this.commands,
+    );
+  }
+
+  private githubLifecycle(run: WorkflowRun): GitHubLifecycle {
+    return new GitHubLifecycle(
+      this.repositories,
+      new GhCliGitHubProvider(),
+      new LocalGitRepositoryGateway(),
+      conservativeFeedbackTriage,
+      run.configuration?.policy === "strict" ? 2 : 8,
     );
   }
 
@@ -799,6 +827,25 @@ function configuredCommand(id: string, environmentName: string): AllowedCommand 
     throw new Error(`${environmentName} must be a non-empty JSON string array`);
   const [executable, ...arguments_] = value;
   return { id, executable: executable!, arguments: arguments_ };
+}
+
+function configuredEnvironment(environmentName: string): Record<string, string> {
+  const raw = process.env[environmentName];
+  if (!raw) return {};
+  let value: unknown;
+  try {
+    value = JSON.parse(raw);
+  } catch {
+    throw new Error(`${environmentName} must be a JSON object of environment string values`);
+  }
+  if (
+    typeof value !== "object" ||
+    value === null ||
+    Array.isArray(value) ||
+    !Object.values(value).every((entry) => typeof entry === "string")
+  )
+    throw new Error(`${environmentName} must be a JSON object of environment string values`);
+  return value as Record<string, string>;
 }
 
 async function main(): Promise<void> {

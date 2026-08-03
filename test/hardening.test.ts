@@ -68,8 +68,9 @@ describe("release hardening", () => {
         {
           id: "timeout",
           executable: process.execPath,
-          arguments: ["-e", "setTimeout(() => {}, 10000)"],
+          arguments: ["-e", "process.on('SIGTERM', () => {}); setTimeout(() => {}, 10000)"],
           timeoutMilliseconds: 20,
+          terminationGraceMilliseconds: 20,
         },
       ],
     });
@@ -154,6 +155,25 @@ describe("release hardening", () => {
             path.join(task.workspace.root, "src/example.ts"), "utf8"
           ).includes("handled");
         } catch {}
+        if (stage === "test") {
+          const fs = require("node:fs");
+          const path = require("node:path");
+          const childProcess = require("node:child_process");
+          fs.mkdirSync(path.join(task.workspace.root, "test"), { recursive: true });
+          fs.writeFileSync(
+            path.join(task.workspace.root, "test/boundary.test.ts"),
+            "export const expected = '" + (remediatedWorkspace ? "handled" : "pending") + "';\\n"
+          );
+          childProcess.execFileSync("git", ["add", "test/boundary.test.ts"], {
+            cwd: task.workspace.root
+          });
+          childProcess.execFileSync("git", ["commit", "-m", "add boundary test"], {
+            cwd: task.workspace.root
+          });
+          revision = childProcess.execFileSync("git", ["rev-parse", "HEAD"], {
+            cwd: task.workspace.root, encoding: "utf8"
+          }).trim();
+        }
         const finding = {
           id: "finding-process-edge", severity: "high", title: "Boundary condition",
           description: "The first revision needs remediation", evidence: "the initial commit is intentional",

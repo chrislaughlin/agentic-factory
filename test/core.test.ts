@@ -366,6 +366,10 @@ describe("workflow vertical slice", () => {
 
     expect(cancelled.status).toBe("cancelled");
     expect(resumed.status).toBe("cancelled");
+
+    cancelled.status = "waiting-final-approval";
+    await repositories.workflowRuns.save(cancelled);
+    expect((await engine.resume(paused.id)).status).toBe("waiting-final-approval");
   });
   it("restricts agent permissions to the stage permission boundary", async () => {
     const repositories = new InMemoryRepositories();

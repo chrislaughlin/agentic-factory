@@ -193,4 +193,76 @@ describe("GitHub lifecycle", () => {
     expect(provider.pollInputs).toHaveLength(pollsBefore);
     repositories.close();
   });
+
+  it("triages ambiguous comments and enforces the external remediation budget", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "factory-triage-budget-"));
+    const repositories = new SqliteRepositories(join(directory, "factory.db"));
+    const provider = new FakeGitHubProvider();
+    await repositories.workflowRuns.save(run);
+    const lifecycle = new GitHubLifecycle(
+      repositories,
+      provider,
+      new FakeGitRepository(),
+      undefined,
+      0,
+    );
+    await lifecycle.publish(run.id, { title: "Change", body: "Evidence" });
+    provider.events = [
+      {
+        key: "comment-action",
+        kind: "review",
+        revision: run.revision,
+        reviewKind: "comment",
+        body: "Please handle the remaining boundary case",
+        author: "reviewer",
+        resolved: false,
+      },
+    ];
+
+    await expect(lifecycle.poll(run.id)).resolves.toMatchObject({ remediationRequired: true });
+    expect(await repositories.workflowRuns.get(run.id)).toMatchObject({
+      status: "escalated",
+      remediationAttempts: 1,
+      escalationReason: "External remediation budget exceeded",
+    });
+    repositories.close();
+  });
+
+  it("replays an event safely when dedupe persistence fails after state application", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "factory-event-replay-"));
+    const repositories = new SqliteRepositories(join(directory, "factory.db"));
+    const provider = new FakeGitHubProvider();
+    await repositories.workflowRuns.save(run);
+    const lifecycle = new GitHubLifecycle(repositories, provider, new FakeGitRepository());
+    await lifecycle.publish(run.id, { title: "Change", body: "Evidence" });
+    provider.events = [
+      {
+        key: "comment-replay",
+        kind: "review",
+        revision: run.revision,
+        reviewKind: "comment",
+        body: "Please update the edge-case coverage",
+        author: "reviewer",
+        resolved: false,
+      },
+    ];
+    const append = repositories.externalEvents.append;
+    let failOnce = true;
+    repositories.externalEvents.append = async (event) => {
+      if (failOnce) {
+        failOnce = false;
+        throw new Error("simulated dedupe write interruption");
+      }
+      await append(event);
+    };
+
+    await expect(lifecycle.poll(run.id)).rejects.toThrow("simulated dedupe write interruption");
+    await expect(lifecycle.poll(run.id)).resolves.toMatchObject({ processed: 1 });
+    expect(await repositories.workflowRuns.get(run.id)).toMatchObject({
+      status: "running",
+      remediationAttempts: 1,
+    });
+    expect(await repositories.externalEvents.list(run.id)).toHaveLength(1);
+    repositories.close();
+  });
 });

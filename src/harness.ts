@@ -97,6 +97,9 @@ export interface ProcessHarnessCommand {
   executable: string;
   arguments?: string[];
   timeoutMilliseconds?: number;
+  terminationGraceMilliseconds?: number;
+  environment?: Record<string, string>;
+  secrets?: string[];
 }
 
 /** Executes a harness as a real local process using JSON on stdin and NDJSON events on stdout. */
@@ -123,9 +126,15 @@ export class ProcessHarnessAdapter implements HarnessAdapter {
   }
 
   async *run(input: HarnessRunInput): AsyncIterable<AgentEvent> {
+    const safeEnvironment = Object.fromEntries(
+      ["PATH", "TMPDIR", "LANG", "LC_ALL", "CI"]
+        .map((name) => [name, process.env[name]])
+        .filter((entry): entry is [string, string] => Boolean(entry[1])),
+    );
     const child = spawn(this.command.executable, this.command.arguments ?? [], {
       cwd: input.task.workspace.root,
-      env: process.env,
+      env: { ...safeEnvironment, ...(this.command.environment ?? {}) },
+      detached: process.platform !== "win32",
       stdio: ["pipe", "pipe", "pipe"],
     });
     this.children.set(input.runId, child);
@@ -136,20 +145,42 @@ export class ProcessHarnessAdapter implements HarnessAdapter {
     child.stderr.setEncoding("utf8");
     child.stdout.on("data", (chunk: string) => (stdout += chunk));
     child.stderr.on("data", (chunk: string) => (stderr += chunk));
-    const timeout = setTimeout(
-      () => child.kill("SIGTERM"),
-      this.command.timeoutMilliseconds ?? 60_000,
-    );
+    let timedOut = false;
+    let forceKill: NodeJS.Timeout | undefined;
+    const timeout = setTimeout(() => {
+      timedOut = true;
+      terminateProcess(child, "SIGTERM");
+      forceKill = setTimeout(
+        () => terminateProcess(child, "SIGKILL"),
+        this.command.terminationGraceMilliseconds ?? 1_000,
+      );
+      forceKill.unref();
+    }, this.command.timeoutMilliseconds ?? 60_000);
     const exitCode = await new Promise<number | null>((resolve, reject) => {
       child.once("error", reject);
       child.once("close", resolve);
     }).finally(() => {
       clearTimeout(timeout);
+      if (forceKill) clearTimeout(forceKill);
       this.children.delete(input.runId);
     });
+    const secrets = [
+      ...(this.command.secrets ?? []),
+      ...Object.entries(this.command.environment ?? {})
+        .filter(([name]) => /(token|secret|password|credential|private.?key|api.?key)/iu.test(name))
+        .map(([, value]) => value),
+    ].filter(Boolean);
+    const redactedStderr = secrets.reduce(
+      (redacted, secret) => redacted.split(secret).join("[REDACTED]"),
+      stderr.trim(),
+    );
+    if (timedOut)
+      throw new Error(
+        `Harness process timed out after ${this.command.timeoutMilliseconds ?? 60_000}ms${redactedStderr ? `: ${redactedStderr}` : ""}`,
+      );
     if (exitCode !== 0)
       throw new Error(
-        `Harness process exited with ${String(exitCode)}${stderr ? `: ${stderr.trim()}` : ""}`,
+        `Harness process exited with ${String(exitCode)}${redactedStderr ? `: ${redactedStderr}` : ""}`,
       );
     for (const line of stdout.split(/\r?\n/u).filter(Boolean)) {
       yield AgentEventSchema.parse(JSON.parse(line));
@@ -157,8 +188,27 @@ export class ProcessHarnessAdapter implements HarnessAdapter {
   }
 
   async cancel(runId: string): Promise<void> {
-    this.children.get(runId)?.kill("SIGTERM");
+    const child = this.children.get(runId);
+    if (!child) return;
+    terminateProcess(child, "SIGTERM");
+    const forceKill = setTimeout(
+      () => terminateProcess(child, "SIGKILL"),
+      this.command.terminationGraceMilliseconds ?? 1_000,
+    );
+    forceKill.unref();
   }
+}
+
+function terminateProcess(child: ChildProcessWithoutNullStreams, signal: NodeJS.Signals): void {
+  if (child.pid && process.platform !== "win32") {
+    try {
+      process.kill(-child.pid, signal);
+      return;
+    } catch {
+      // Fall back to the direct child when it has already left its process group.
+    }
+  }
+  child.kill(signal);
 }
 
 abstract class ExternalHarnessScaffold implements HarnessAdapter {

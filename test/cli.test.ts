@@ -89,8 +89,11 @@ describe("operator CLI", () => {
       CliExitCode.ValidationFailure,
     );
     expect(await runCli(["cancel", "workflow-1", "--yes"], backend(), io())).toBe(
-      CliExitCode.Success,
+      CliExitCode.TerminalFailure,
     );
+    expect(
+      await runCli(["reject", "approval-1", "--reason", "not ready", "--yes"], backend(), io()),
+    ).toBe(CliExitCode.TerminalFailure);
     expect(await runCli(["retry", "workflow-1", "--stage", "qa"], backend(), io())).toBe(
       CliExitCode.Success,
     );
