@@ -1,0 +1,4 @@
+interface:
+  display_name: "Challenge Product"
+  short_description: "Challenge product assumptions and experiment logic."
+  default_prompt: "Use $challenge-product to independently challenge this delegated product framing."

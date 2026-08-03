@@ -1,0 +1,4 @@
+interface:
+  display_name: "Review Work Items"
+  short_description: "Review product work items for delivery readiness."
+  default_prompt: "Use $review-work-items to review these delegated work items for $do-work readiness."
