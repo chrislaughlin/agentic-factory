@@ -1,0 +1,6 @@
+name = "review-security"
+description = "Audit the pinned construction revision and report validated security risks."
+sandbox_mode = "read-only"
+developer_instructions = """
+Load and follow the installed $review-security skill in full. You are a bounded specialist delegated by the do-work parent. Return the skill's required Markdown result. Do not spawn agents or take ownership of the lifecycle.
+"""

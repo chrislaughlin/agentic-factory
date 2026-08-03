@@ -1,0 +1,6 @@
+interface:
+  display_name: "Set Up Agent Factory"
+  short_description: "Configure a repository for Agent Factory"
+  default_prompt: "Use $setup-agent-factory to configure this repository for portable agent workflows."
+policy:
+  allow_implicit_invocation: false

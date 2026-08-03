@@ -1,0 +1,4 @@
+interface:
+  display_name: "Verify QA"
+  short_description: "Validate acceptance criteria with evidence"
+  default_prompt: "Use $verify-qa to verify the approved acceptance criteria against the tested revision."

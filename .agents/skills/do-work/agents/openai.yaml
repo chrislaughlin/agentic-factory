@@ -1,0 +1,6 @@
+interface:
+  display_name: "Do Work"
+  short_description: "Plan, build, verify, and publish work"
+  default_prompt: "Use $do-work with a ticket, PRD, spec, URL, or task description."
+policy:
+  allow_implicit_invocation: false

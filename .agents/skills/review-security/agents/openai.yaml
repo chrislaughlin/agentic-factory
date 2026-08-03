@@ -1,0 +1,4 @@
+interface:
+  display_name: "Review Security"
+  short_description: "Audit changed code for security risks"
+  default_prompt: "Use $review-security to audit the pinned construction revision for validated risks."

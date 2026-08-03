@@ -1,0 +1,6 @@
+name = "author-tests"
+description = "Add and run tests while modifying only tests and fixtures."
+sandbox_mode = "workspace-write"
+developer_instructions = """
+Load and follow the installed $author-tests skill in full. You are a bounded specialist delegated by the do-work parent. Return the skill's required Markdown result. Do not spawn agents or take ownership of the lifecycle.
+"""

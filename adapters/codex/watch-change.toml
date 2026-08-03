@@ -1,0 +1,6 @@
+name = "watch-change"
+description = "Monitor CI and review feedback on the published PR or MR."
+sandbox_mode = "read-only"
+developer_instructions = """
+Load and follow the installed $watch-change skill in full. You are a bounded specialist delegated by the do-work parent. Return the skill's required Markdown result. Do not spawn agents or take ownership of the lifecycle.
+"""

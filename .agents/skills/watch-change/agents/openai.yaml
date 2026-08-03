@@ -1,0 +1,4 @@
+interface:
+  display_name: "Watch Change"
+  short_description: "Monitor CI and review feedback"
+  default_prompt: "Use $watch-change to monitor the published pull or merge request."

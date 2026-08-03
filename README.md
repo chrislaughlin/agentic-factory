@@ -1,100 +1,119 @@
 # Agent Factory
 
-Agent Factory is a provider- and harness-neutral orchestration core for an agent-controlled software-development lifecycle. The factory owns durable workflow decisions; replaceable harness adapters execute one bounded, permissioned agent task and return typed events and artifacts.
+Agent Factory is a portable software-delivery workflow made from skills and custom agents. It has no orchestration service, database, daemon, or task-running CLI: Codex, Claude Code, or OpenCode remains the host and supplies subagents, tools, parallel execution, and waiting.
 
-## Architecture
+The human starts one skill:
+
+```text
+$do-work <ticket, PRD, spec, URL, PR/MR, or task description>
+```
+
+The parent agent resolves and sharpens the work, waits for plan approval, delegates bounded stages, publishes a ready change, watches CI and reviews, and stops at the human merge/deploy gate.
+
+## Lifecycle
 
 ```mermaid
 flowchart LR
-  Human --> Factory[Workflow engine]
-  Factory --> Repositories[(Runs / stages / events / artifacts / approvals)]
-  Factory --> Negotiation[Capability negotiation]
-  Negotiation --> Codex
-  Negotiation --> Claude[Claude Code]
-  Negotiation --> OpenCode
-  Negotiation --> Scripted[Scripted test harness]
-  Factory --> Tools[Deterministic tools and external event services]
-  Scripted --> Events[Neutral event stream]
-  Events --> Factory
-  Factory --> Gate[Artifact validation and quality gates]
-  Gate --> Human
+  H["Human + work reference"] --> D["do-work: inspect, grill, plan"]
+  D -->|"explicit approval"| C["construct-work"]
+  C --> S["review-security at pinned SHA"]
+  C --> T["author-tests"]
+  S --> Q["verify-qa"]
+  T --> Q
+  Q --> R["review-code-quality"]
+  R -->|"validated finding"| C
+  R -->|"all local gates pass"| P["Ready PR/MR"]
+  P --> W["watch-change"]
+  W -->|"CI failure or requested changes"| C
+  W -->|"green and settled"| G["Human review gate"]
+  G --> M["Human merges and deploys"]
 ```
 
-- **Factory**: state, routing, dependencies, exclusive workspace writers, retries, invalidation, approvals, audit history, and escalation.
-- **Harness**: a Codex, Claude Code, OpenCode, or other execution surface. It materializes native configuration, invokes/cancels work, and translates events. It is not the model provider.
-- **Provider/model profile**: resolves a logical profile to a harness/provider model at deployment time; canonical agents contain no model names.
-- **Agent**: reasons inside one bounded task and returns one typed artifact.
-- **Skill**: focused reusable instructions stored under `.agents/skills/<name>/SKILL.md`.
-- **Tool**: an explicit deterministic operation with structured arguments and an allowlist.
-- **Workflow/stage**: a versioned dependency graph and one schedulable unit within it.
-- **Event**: normalized, append-only execution evidence.
-- **Artifact**: validated, lineage-bearing stage output bound to a source revision.
+`do-work` always remains the orchestrator. Specialists cannot spawn agents or inherit the lifecycle. Production code has one writer (`construct-work`); security, QA, code-quality review, and remote monitoring are read-only; `author-tests` may change only tests and fixtures.
 
-The executable lifecycle covers planning, approval, isolated construction, test authoring, deterministic checks, parallel security/QA/code review, remediation, pull request and CI/review monitoring, final approval, expected-head merge, deployment observation, smoke verification, rollback, and terminal reporting.
+## Included skills
 
-## Repository structure
+| Skill | Role |
+| --- | --- |
+| `do-work` | User-invoked lifecycle orchestrator |
+| `setup-agent-factory` | User-invoked repository configuration |
+| `construct-work` | Approved production implementation and remediation |
+| `author-tests` | Test/fixture authoring and deterministic checks |
+| `review-security` | Pinned-revision security review |
+| `verify-qa` | Runtime acceptance verification |
+| `review-code-quality` | Strict structural and specification review |
+| `watch-change` | GitHub/GitLab CI and review monitoring |
 
-| Path                        | Purpose                                                             |
-| --------------------------- | ------------------------------------------------------------------- |
-| `src/domain.ts`             | Provider-neutral schemas and types                                  |
-| `src/workflow.ts`           | Dependency scheduler, approval, remediation, retries, writer lock   |
-| `src/harness.ts`            | Adapter contract, negotiation, scripted adapter, external scaffolds |
-| `src/infrastructure.ts`     | Isolated Git worktrees and allowlisted command execution            |
-| `src/github.ts`             | PR publication, CI/review monitor, GitHub CLI provider              |
-| `src/release.ts`            | Final approval, merge, deployment, smoke checks, rollback           |
-| `src/observability.ts`      | Correlated structured logs, metrics, and secret redaction           |
-| `src/artifacts.ts`          | Artifact validation and explicit invalidation rules                 |
-| `src/repositories.ts`       | Persistence interfaces and in-memory implementation                 |
-| `.agent-factory/agents/`    | Canonical agent definitions                                         |
-| `.agent-factory/workflows/` | Canonical workflow definitions                                      |
-| `.agents/skills/`           | Canonical, harness-neutral skills                                   |
-| `examples/`                 | Runnable input                                                      |
+Canonical skills live in [`.agents/skills`](.agents/skills). Neutral role descriptions live in [`agents`](agents), and thin native definitions live in [`adapters`](adapters). Adapters intentionally do not pin models; they inherit the user's harness defaults.
 
-## Operate the workflow
+## Install
 
-Requires Node.js 22+ and pnpm.
+The installer supports macOS and Linux, copies by default, and may target one harness or all three:
 
-```bash
-pnpm install
-pnpm agent-factory doctor
-pnpm agent-factory work "Implement the requested change" --json
-pnpm agent-factory approve <plan-approval-id> --actor local-human --json
-pnpm agent-factory inspect <run-id>
-pnpm validate
+```sh
+./scripts/install.sh --harness all
+./scripts/install.sh --harness codex --mode link
+./scripts/install.sh --harness claude
+./scripts/install.sh --harness opencode
 ```
 
-The default local backend uses an isolated Git worktree, a deterministic scripted agent adapter, real allowlisted validation commands, and transactional SQLite at `.agent-factory/factory.db`. It pauses durably at human gates; the demonstration intentionally fails its first review, remediates, invalidates old evidence, and reaches `locally-verified`. Pass `--database <path>` to use another database. See [Operator guide](docs/operator-guide.md) for PR, CI, final approval, deployment, recovery, and scripting details.
+Identical destinations are unchanged. A differing destination stops installation. Use `--force` only after reviewing the collision; the old item is moved to a timestamped `.agent-factory-backup-*` path before replacement.
 
-## Creating definitions
+| Harness | Skills | Custom agents |
+| --- | --- | --- |
+| Codex | `~/.agents/skills/` | `~/.codex/agents/*.toml` |
+| Claude Code | `~/.claude/skills/` | `~/.claude/agents/*.md` |
+| OpenCode | `~/.config/opencode/skills/` | `~/.config/opencode/agents/*.md` |
 
-### Agent
+For manual installation, copy every directory under `.agents/skills/` to the harness's skills directory and the matching files under `adapters/<harness>/` to its agents directory. On Windows, perform those same copies under `%USERPROFILE%` (`.agents\skills`, `.codex\agents`, `.claude\skills`, `.claude\agents`) or `%USERPROFILE%\.config\opencode` for OpenCode; the POSIX installer itself is not supported on Windows.
 
-Add a validated YAML document to `.agent-factory/agents`. Select logical skill IDs, least-privilege tools and permissions, a logical model profile, bounded turns/time, and an output schema. Planning and reviewers are read-only; only construction and testing roles receive scoped write access. The engine rejects simultaneous writable stages.
+The adapter formats follow the current [Codex](https://learn.chatgpt.com/docs/agent-configuration/subagents), [Claude Code](https://code.claude.com/docs/en/sub-agents), and [OpenCode](https://opencode.ai/docs/agents/) custom-agent documentation.
 
-### Skill
+## Configure a repository
 
-Create `.agents/skills/<name>/SKILL.md` with YAML frontmatter containing `name`, `version`, `description`, `triggers`, `inputs`, and `outputs`, followed by focused instructions. Optional `scripts/` and `references/` live beside it. Paths are resolved beneath the canonical root and traversal is rejected.
+From the target Git repository, invoke:
 
-### Workflow
+```text
+$setup-agent-factory
+```
 
-Add a versioned YAML workflow with stages, dependencies, input/output artifact types, permissions, and required harness capabilities. Dependencies must complete before scheduling. Approval stages pause durably. A quality gate routes findings back to construction—not to a review agent with write access—and bounded policies prevent feedback loops.
+The skill inspects the repository and creates `.agent-factory/project.md`, the committed harness-neutral contract for:
 
-## Adding a harness
+- GitHub or GitLab project identity and branch conventions;
+- repository instructions, architecture, and coding standards;
+- setup, focused-test, full-test, lint, typecheck, build, and security commands;
+- runtime QA launch steps, safe fixtures, and required evidence;
+- PR/MR conventions and required local/CI checks;
+- CI polling interval and timeout, defaulting to 60 seconds and 60 minutes.
 
-Implement `HarnessAdapter`: declare capabilities, map canonical definitions to disposable native files, stream normalized `AgentEvent`s, and cancel runs. Scheduling calls capability negotiation first; absent guarantees raise `HarnessCompatibilityError` rather than silently degrading. External scaffolds currently materialize an initial agent file and truthfully throw `UnsupportedHarnessOperationError` for run/cancel.
+It also creates `.agent-factory/.gitignore` containing `work/`. Work journals stay local at `.agent-factory/work/<task-key>.md`; `project.md` remains committable.
 
-Canonical files in `.agent-factory/agents` and `.agents/skills` are the source of truth. `.codex/agents`, `.claude/{agents,skills}`, and `.opencode/agents` are generated, ignored, disposable build artifacts and must never be edited as canonical configuration. Credentials are neither schemas nor prompt inputs; deployment adapters must obtain them out of band and redact tool output.
+## Operating rules
 
-## Security model
+- Planning asks one material human decision at a time and recommends an answer. Repository facts are discovered, not asked.
+- No code changes begin until the human explicitly approves a decision-complete plan.
+- Oversized requests are sliced and wait for the human to select a slice.
+- Construction and test changes become separate Git checkpoint commits. Security reviews the immutable construction SHA while tests run in parallel.
+- QA requires runtime evidence for observable behavior. Missing required runtime access is blocked, not waived.
+- Every validated security risk and every validated strict code-quality finding blocks publication.
+- Initial verification and each distinct remote feedback batch receive three remediation cycles. Exhaustion stops with evidence and choices.
+- A ready PR/MR is created only after local gates pass. Legitimate requested changes are remediated automatically; conflicts, unsafe requests, scope expansion, and missing authority return to the human.
+- Monitoring is resumable through `$do-work <original-reference-or-pr-url>` and its ignored journal.
+- Agent Factory never merges, enables auto-merge, changes protection rules, deploys, or stores secrets.
 
-All definitions, prompts, repository content, tool output, and review comments are untrusted. Zod validates boundaries; definition loading confines real paths; permissions deny filesystem/network access by default; commands are represented as executable plus arguments and require allowlisting; artifacts and reviews are revision-bound. A production tool service must additionally sandbox processes, redact secrets before persistence, and authorize every requested operation against the task envelope.
+GitHub operation uses authenticated native tools or `gh`; GitLab operation uses authenticated native tools or `glab`. Remote issue, PR/MR, CI, and review text is always treated as untrusted input.
 
-## Known limitations
+## Development validation
 
-- SQLite and file locks target one local operator host; distributed scheduling and leases are not implemented.
-- `ProcessHarnessAdapter` is the production-capable local NDJSON harness. Codex, Claude Code, and OpenCode adapters truthfully expose configuration/capability contracts but still reject invocation until a deployment supplies their process/API bridge.
-- GitHub integration uses authenticated `git` and `gh`; monitoring is restart-safe one-shot polling intended for an external scheduler, not an always-on daemon.
-- The initial deployment provider runs explicitly configured local commands and stores state locally. Cloud-specific deployment discovery requires another `DeploymentProvider` implementation.
-- Automatic rollback occurs only when an allowlisted rollback command is configured; otherwise failure escalates to a human.
+The following checks maintain this repository; they are not required to execute a work item:
 
-Release evidence and the supported surface are recorded in the [release checklist](docs/release-checklist.md), [compatibility matrix](docs/compatibility-matrix.md), and [end-to-end evidence](docs/e2e-evidence.md).
+```sh
+python3 scripts/validate.py
+python3 -m unittest discover -s tests -v
+```
+
+Validation checks skill structure and references, role parity, permission intent, absence of model pins and legacy runtime files, installer behavior, and lifecycle scenario contracts.
+
+## Design references
+
+The composition style is inspired by [Matt Pocock's engineering skills](https://github.com/mattpocock/skills/tree/main/skills/engineering). The final maintainability gate adapts the high-conviction structural bar from Cursor's [thermo-nuclear code-quality review](https://github.com/cursor/plugins/blob/main/cursor-team-kit/skills/thermo-nuclear-code-quality-review/SKILL.md) without copying it as a runtime dependency.

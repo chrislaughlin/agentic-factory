@@ -1,0 +1,10 @@
+{
+  "roles": {
+    "construct-work": { "permission": "workspace-write" },
+    "author-tests": { "permission": "tests-write" },
+    "review-security": { "permission": "read-only" },
+    "verify-qa": { "permission": "read-only" },
+    "review-code-quality": { "permission": "read-only" },
+    "watch-change": { "permission": "read-only" }
+  }
+}

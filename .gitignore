@@ -1,11 +1,13 @@
-node_modules/
-dist/
-.agent-factory/*.db
-.agent-factory/*.db-shm
-.agent-factory/*.db-wal
-.agent-factory/runs/
+__pycache__/
+*.py[cod]
+.coverage
+.DS_Store
+
+.agent-factory/work/
+
+# Harness-native project installations are generated from canonical sources.
 .claude/agents/
 .claude/skills/
 .codex/agents/
 .opencode/agents/
-coverage/
+.opencode/skills/

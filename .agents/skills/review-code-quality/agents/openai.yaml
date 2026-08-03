@@ -1,0 +1,4 @@
+interface:
+  display_name: "Review Code Quality"
+  short_description: "Run a strict maintainability review"
+  default_prompt: "Use $review-code-quality to audit the tested change for structural code quality."

@@ -1,0 +1,4 @@
+interface:
+  display_name: "Author Tests"
+  short_description: "Create focused tests and fixtures"
+  default_prompt: "Use $author-tests to add or update tests for the current construction checkpoint."

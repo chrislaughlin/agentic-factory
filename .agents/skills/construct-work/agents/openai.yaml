@@ -1,0 +1,4 @@
+interface:
+  display_name: "Construct Work"
+  short_description: "Implement approved plans and remediations"
+  default_prompt: "Use $construct-work to implement the approved plan or remediation request."

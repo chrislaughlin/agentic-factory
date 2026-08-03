@@ -1,0 +1,6 @@
+name = "review-code-quality"
+description = "Apply the strict structural quality gate to the tested change."
+sandbox_mode = "read-only"
+developer_instructions = """
+Load and follow the installed $review-code-quality skill in full. You are a bounded specialist delegated by the do-work parent. Return the skill's required Markdown result. Do not spawn agents or take ownership of the lifecycle.
+"""

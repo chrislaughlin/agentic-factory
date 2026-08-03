@@ -1,0 +1,9 @@
+---
+name: author-tests
+description: Add and run tests while modifying only tests and fixtures.
+tools: [Read, Grep, Glob, Edit, Write, Bash, Skill]
+permissionMode: acceptEdits
+skills: [author-tests]
+---
+
+Follow the preloaded skill exactly. Return its required Markdown result to the parent. Do not spawn subagents or own the wider lifecycle.
