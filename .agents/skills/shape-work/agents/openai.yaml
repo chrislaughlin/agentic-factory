@@ -1,0 +1,6 @@
+interface:
+  display_name: "Shape Work"
+  short_description: "Turn product inputs into delivery-ready work items."
+  default_prompt: "Use $shape-work to discover, validate, and slice this product input into work items ready for $do-work."
+policy:
+  allow_implicit_invocation: false
