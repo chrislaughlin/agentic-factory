@@ -68,7 +68,6 @@ After plan approval, each work item receives a dedicated task branch and sibling
 | `challenge-product` | Independent assumptions, risks, options, and experiment challenge |
 | `review-work-items` | Independent work-item readiness and slicing review |
 | `do-work` | User-invoked lifecycle orchestrator |
-| `setup-agent-factory` | User-invoked repository configuration |
 | `construct-work` | Approved production implementation and remediation |
 | `author-tests` | Test/fixture authoring and deterministic checks |
 | `review-security` | Pinned-revision security review |
@@ -101,28 +100,16 @@ For manual installation, copy every directory under `.agents/skills/` to the har
 
 The adapter formats follow the current [Codex](https://learn.chatgpt.com/docs/agent-configuration/subagents), [Claude Code](https://code.claude.com/docs/en/sub-agents), and [OpenCode](https://opencode.ai/docs/agents/) custom-agent documentation.
 
-## Configure a repository
+## Repository discovery
 
-From the target Git repository, invoke:
+No repository setup step or Agent Factory configuration file is required. At the start of each work item, `do-work` inspects the live repository and forge to discover its instructions, architecture, branch conventions, environment prerequisites, verification commands, runtime QA paths, publication rules, and required checks.
 
-```text
-$setup-agent-factory
-```
-
-The skill inspects the repository and creates `.agent-factory/project.md`, the committed harness-neutral contract for:
-
-- GitHub or GitLab project identity and branch conventions;
-- repository instructions, architecture, and coding standards;
-- setup, focused-test, full-test, lint, typecheck, build, and security commands;
-- runtime QA launch steps, safe fixtures, and required evidence;
-- PR/MR conventions and required local/CI checks;
-- CI polling interval and timeout, defaulting to 60 seconds and 60 minutes.
-
-Work journals stay local under Git's shared private metadata at `<git-common-directory>/agent-factory/work/<task-key>.md`; `project.md` remains committable. No Agent Factory-specific ignore file is required.
+The discovered context and its sources are recorded in the local work journal under Git's shared private metadata at `<git-common-directory>/agent-factory/work/<task-key>.md`. Relevant context is passed to specialists with the approved plan, avoiding a duplicate committed description of the repository. On resume, `do-work` refreshes facts whose sources changed.
 
 ## Operating rules
 
 - Planning asks one material human decision at a time and recommends an answer. Repository facts are discovered, not asked.
+- Repository discovery happens within every `do-work` run; it never requires an initialization hook, setup skill, or generated project contract.
 - No code changes begin until the human explicitly approves a decision-complete plan.
 - Every approved work item runs in its own Git worktree; unrelated changes in the invoking checkout are neither stashed nor copied into it.
 - New worktrees receive a one-time copy of ignored local `.env` and `.env.*` regular files, while tracked templates continue to come from Git. Copied paths are revalidated before every checkpoint commit and push so later ignore-rule changes cannot expose them.

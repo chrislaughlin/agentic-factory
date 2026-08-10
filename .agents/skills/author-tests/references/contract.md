@@ -5,7 +5,7 @@
 - Approved plan and acceptance criteria.
 - Construction checkpoint SHA and expected branch.
 - Delegated [worktree identity](../../do-work/references/worktree.md), with the construction checkpoint supplied separately as the expected revision.
-- Project test commands and repository conventions.
+- Discovered test commands, their sources, and repository conventions.
 
 ## Rules
 
@@ -13,7 +13,7 @@
 - Run every repository command and make every test change inside the delegated worktree. Verify its Git common directory, branch, and construction head before editing; never write to the control checkout or another worktree.
 - Do not change production sources, dependency manifests, build configuration, or CI configuration.
 - Test externally meaningful behavior. Avoid tests that only mirror implementation details.
-- Run focused tests while iterating, then the configured full tests and required deterministic checks.
+- Run focused tests while iterating, then the discovered full tests and required deterministic checks.
 - Revalidate every journaled environment-file path according to the worktree identity contract immediately before staging or committing. Never stage one of those paths, even forcibly.
 - Commit changed test assets separately. If no change is needed, return the unchanged head and explain existing coverage.
 

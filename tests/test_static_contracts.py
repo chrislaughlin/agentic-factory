@@ -29,6 +29,19 @@ class StaticContractTests(unittest.TestCase):
         self.assertIn("Permit three full remediation cycles", do_work)
         self.assertIn("Never merge or deploy", workflow)
 
+    def test_orchestrator_discovers_repository_context_without_setup_step(self):
+        do_work = (ROOT / ".agents/skills/do-work/SKILL.md").read_text()
+        discovery = (ROOT / ".agents/skills/do-work/references/repository-discovery.md").read_text()
+        runtime_text = "\n".join(
+            path.read_text()
+            for path in (ROOT / ".agents/skills").glob("**/*.md")
+        )
+        self.assertFalse((ROOT / ".agents/skills/setup-agent-factory").exists())
+        self.assertNotIn(".agent-factory/project.md", runtime_text)
+        self.assertIn("Discover the repository context", do_work)
+        self.assertIn("Do not create a repository configuration file", discovery)
+        self.assertIn("Repository context", (ROOT / ".agents/skills/do-work/references/journal.md").read_text())
+
     def test_product_shaping_lifecycle_has_human_gates_and_delivery_contract(self):
         shape = (ROOT / ".agents/skills/shape-work/SKILL.md").read_text()
         lifecycle = (ROOT / ".agents/skills/shape-work/references/lifecycle.md").read_text()

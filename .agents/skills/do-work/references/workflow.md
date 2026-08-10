@@ -2,7 +2,7 @@
 
 ## Preconditions
 
-- Require a Git repository and a configured `.agent-factory/project.md`.
+- Require a Git repository and discover its delivery context according to [repository-discovery.md](repository-discovery.md).
 - Preserve unrelated changes in the user's control checkout. Never stash, copy, commit, or otherwise carry them into the task worktree.
 - Record the baseline branch and commit before construction. Uncommitted control-checkout changes are not part of that baseline; stop if the requested work depends on them.
 - Require the dedicated task branch and [worktree identity](worktree.md) defined for each work item. Place its absolute path outside every existing worktree, never reuse it for another item, and never rewrite published history.
@@ -12,8 +12,8 @@
 
 1. **Construction** — give the approved plan, acceptance criteria, baseline, allowed scope, absolute worktree path, and any remediation findings to `construct-work`. Require a clean production-code checkpoint commit made inside that worktree.
 2. **Parallel verification** — pin security to the construction commit. Start `review-security` and `author-tests` together. The tester may commit only tests and fixtures. Security must inspect the pinned tree with commit-addressed Git commands, not mutable working-tree contents.
-3. **Deterministic checks** — run every configured relevant check and the full test suite from the task worktree. Pre-existing failures are not silently accepted; distinguish and evidence them.
-4. **QA** — give `verify-qa` the approved acceptance criteria, tested head, absolute worktree path, project QA instructions, and prior command evidence. Launch runtime surfaces from the worktree.
+3. **Deterministic checks** — run every discovered relevant check and the full test suite from the task worktree. Pre-existing failures are not silently accepted; distinguish and evidence them.
+4. **QA** — give `verify-qa` the approved acceptance criteria, tested head, absolute worktree path, discovered QA context, and prior command evidence. Launch runtime surfaces from the worktree.
 5. **Code quality** — give `review-code-quality` the baseline, tested head, absolute worktree path, plan, repository standards, and earlier evidence.
 6. **Gate** — pass only if all stages return `pass` for the expected revisions. Treat `blocked` as a stop, not a pass.
 
@@ -44,4 +44,4 @@
 
 ## Completion
 
-Complete automation when required CI checks pass and there are no unresolved requested changes. Approval counts and merge policy remain human concerns unless the project contract explicitly makes them CI gates. Never merge or deploy.
+Complete automation when required CI checks pass and there are no unresolved requested changes. Approval counts and merge policy remain human concerns unless discovered repository policy makes them CI gates. Never merge or deploy.

@@ -20,6 +20,9 @@ Store each run at `<absolute-git-common-directory>/agent-factory/work/<task-key>
 ## Approved plan
 <scope, ordered changes, interfaces, risks, acceptance criteria, verification>
 
+## Repository context
+<resolved fields and source evidence required by [repository-discovery.md](repository-discovery.md)>
+
 ## Environment bootstrap
 - <copied relative .env path, or none>
 
@@ -47,4 +50,4 @@ Store each run at `<absolute-git-common-directory>/agent-factory/work/<task-key>
 Use $do-work <original-reference-or-pr-url> and validate branch/revisions before continuing.
 ```
 
-Append evidence; do not erase failed attempts. Update the state summary atomically after a stage finishes. Never store environment-file contents or values. Before resuming, verify the Git common directory, control checkout, registered worktree path, branch, PR/MR head, recorded SHAs, and environment-bootstrap paths. If a human removed the worktree, recreate it from the validated recorded branch and bootstrap only from the recorded control checkout. If state diverges, mark prior downstream evidence stale and return to the earliest affected stage.
+Append evidence; do not erase failed attempts. Update the state summary atomically after a stage finishes. Never store environment-file contents or values. Before resuming, verify the Git common directory, control checkout, registered worktree path, branch, PR/MR head, recorded SHAs, environment-bootstrap paths, and repository-context sources. If a human removed the worktree, recreate it from the validated recorded branch and bootstrap only from the recorded control checkout. If state diverges, refresh the affected context, mark prior downstream evidence stale, and return to the earliest affected stage.

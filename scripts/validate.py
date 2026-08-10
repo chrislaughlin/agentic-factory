@@ -44,7 +44,6 @@ def validate() -> list[str]:
     expected_skills = {
         "shape-work",
         "do-work",
-        "setup-agent-factory",
         "construct-work",
         "author-tests",
         "review-security",
@@ -87,7 +86,7 @@ def validate() -> list[str]:
             ui_text = ui.read_text(encoding="utf-8")
             if f"${name}" not in ui_text or "display_name:" not in ui_text:
                 errors.append(f"{ui.relative_to(ROOT)}: invalid UI metadata")
-            if name in {"do-work", "setup-agent-factory", "shape-work"} and "allow_implicit_invocation: false" not in ui_text:
+            if name in {"do-work", "shape-work"} and "allow_implicit_invocation: false" not in ui_text:
                 errors.append(f"{ui.relative_to(ROOT)}: user-invoked skill must disable implicit invocation")
 
     manifest = json.loads((AGENTS / "manifest.json").read_text(encoding="utf-8"))

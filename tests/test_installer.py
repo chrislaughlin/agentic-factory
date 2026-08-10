@@ -25,7 +25,9 @@ class InstallerTests(unittest.TestCase):
             home = Path(directory)
             first = install(home, "--harness", "all")
             self.assertIn("installed", first.stdout)
-            self.assertEqual(len(list((home / ".agents/skills").glob("*/SKILL.md"))), 12)
+            source_skills = {path.parent.name for path in (ROOT / ".agents/skills").glob("*/SKILL.md")}
+            installed_skills = {path.parent.name for path in (home / ".agents/skills").glob("*/SKILL.md")}
+            self.assertEqual(installed_skills, source_skills)
             self.assertEqual(len(list((home / ".codex/agents").glob("*.toml"))), 9)
             self.assertEqual(len(list((home / ".claude/agents").glob("*.md"))), 9)
             self.assertEqual(len(list((home / ".config/opencode/agents").glob("*.md"))), 9)

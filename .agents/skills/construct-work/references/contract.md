@@ -5,7 +5,7 @@
 - Approved plan and acceptance criteria.
 - Baseline or previous tested revision.
 - Delegated [worktree identity](../../do-work/references/worktree.md) and expected revision.
-- Allowed paths/scope and repository project contract.
+- Allowed paths/scope and relevant discovered repository context.
 - Optional remediation findings copied without dilution.
 
 ## Rules

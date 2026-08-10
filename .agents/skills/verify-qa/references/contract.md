@@ -5,7 +5,7 @@ Inputs include the delegated [worktree identity](../../do-work/references/worktr
 ## Evidence rules
 
 - Map every approved acceptance criterion to an explicit result.
-- Use the project contract's launch path, fixtures, safe test data, and required evidence.
+- Use the discovered repository context's launch path, fixtures, safe test data, and required evidence.
 - For UI behavior, interact with the running interface and capture visible state plus relevant console/network evidence.
 - For APIs and CLIs, capture sanitized requests/commands, responses/output, exit status, and resulting state.
 - For libraries, execute a consumer-visible example or targeted integration path when meaningful.
