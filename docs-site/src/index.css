@@ -1,7 +1,7 @@
 :root {
   font-family: 'Manrope Variable', 'Avenir Next', sans-serif;
-  color: #e5e0d4;
-  background: #0b0c0e;
+  color: #111214;
+  background: #f4f4f0;
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
@@ -38,8 +38,8 @@ button {
 }
 
 ::selection {
-  color: #121317;
-  background: #d4af65;
+  color: #ffffff;
+  background: #2457ff;
 }
 
 @media (prefers-reduced-motion: reduce) {

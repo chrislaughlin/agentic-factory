@@ -11,8 +11,6 @@ import {
   type NodeTypes,
 } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
-import loomDesktop from './assets/vertical-loom-desktop.webp'
-import loomMobile from './assets/vertical-loom-mobile.webp'
 import './App.css'
 
 type RouteNodeData = {
@@ -29,20 +27,17 @@ const SHAPE_COMMAND =
 const DO_COMMAND =
   '$do-work <ticket, PRD, spec, URL, PR/MR, or task description>'
 
-function CordMark({ size = 28 }: { size?: number }) {
+function FactoryMark({ size = 28 }: { size?: number }) {
   return (
     <svg
       aria-hidden="true"
-      className="cord-mark"
+      className="factory-mark"
       height={size}
       viewBox="0 0 32 32"
       width={size}
     >
-      <path d="M5 7l22 18M27 7L5 25M8 4l20 16M24 4L4 20" />
-      <circle cx="6" cy="6" r="2.5" />
-      <circle cx="26" cy="6" r="2.5" />
-      <circle cx="6" cy="26" r="2.5" />
-      <circle cx="26" cy="26" r="2.5" />
+      <path d="M4 4h10v10H4zM18 4h10v10H18zM4 18h10v10H4z" />
+      <path d="M18 18h10M18 23h10M18 28h10" />
     </svg>
   )
 }
@@ -69,7 +64,6 @@ function RouteNode({ data }: NodeProps) {
   return (
     <div className={`route-node route-node--${node.kind ?? 'default'}`}>
       <Handle position={Position.Left} type="target" />
-      <span className="route-node__eyelet" aria-hidden="true" />
       <div>
         <strong>{node.label}</strong>
         <span>{node.detail}</span>
@@ -351,7 +345,6 @@ function CommandBlock({
     <div className="command-wrap">
       <span className="command-label">{label}</span>
       <div className="command-block">
-        <span className="command-eyelet" aria-hidden="true" />
         <code>{command}</code>
         <button
           className="copy-button"
@@ -472,7 +465,7 @@ function App() {
 
       <header className="site-header">
         <a className="brand" href="#top" aria-label="Agent Factory home">
-          <CordMark />
+          <FactoryMark />
           <span>Agent Factory</span>
         </a>
         <nav aria-label="Primary navigation">
@@ -490,7 +483,7 @@ function App() {
       <main id="main-content">
         <section className="hero" id="top">
           <div className="hero-copy">
-            <CordMark size={34} />
+            <FactoryMark size={34} />
             <h1>From work item to ready change.</h1>
             <p>
               A portable delivery workflow of specialist agents, explicit human
@@ -513,15 +506,10 @@ function App() {
           </div>
 
           <div className="loom" id="system" aria-label="Agent Factory orchestration system">
-            <picture className="loom-material" aria-hidden="true">
-              <source media="(max-width: 700px)" srcSet={loomMobile} />
-              <img alt="" src={loomDesktop} />
-            </picture>
             <div className="loom-hosts" aria-label="Supported hosts">
               {['Codex', 'Claude Code', 'OpenCode'].map((host) => (
                 <div className="host-pocket" key={host}>
                   <span>{host}</span>
-                  <i aria-hidden="true" />
                 </div>
               ))}
             </div>
@@ -533,7 +521,6 @@ function App() {
                   href={stage.href}
                   key={stage.id}
                 >
-                  <span className="stage-eyelet" aria-hidden="true" />
                   <span>
                     <strong>{stage.label}</strong>
                     <small>{stage.detail}</small>
@@ -644,7 +631,6 @@ function App() {
               ['Finish', 'review-code-quality · watch-change · human review'],
             ].map(([label, detail]) => (
               <div className="role-channel" key={label}>
-                <span className="role-eyelet" aria-hidden="true" />
                 <strong>{label}</strong>
                 <span>{detail}</span>
               </div>
@@ -669,7 +655,7 @@ function App() {
         </section>
 
         <section className="start" id="start">
-          <CordMark size={38} />
+          <FactoryMark size={38} />
           <h2>Install once. Keep every gate human.</h2>
           <p>
             Begin with all three host adapters, then choose the command that
