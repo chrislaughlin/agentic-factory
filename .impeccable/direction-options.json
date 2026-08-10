@@ -1,0 +1,73 @@
+{
+  "title": "Choose Agent Factory's visual world",
+  "question": "Keep the production-traveler direction, choose a dealt alternate, or re-roll.",
+  "options": [
+    {
+      "id": "assigned",
+      "label": "The Production Traveler",
+      "kicker": "ASSIGNED DIRECTION",
+      "lineage": "industrial job travelers, routing dockets, and inspection stamps",
+      "thesis": "Every software change becomes a tangible job moving through named specialist stations and human approval gates.",
+      "palette": ["#172238", "#E8E2D3", "#F0B72F", "#B83A34"],
+      "materials": ["carbon-copy stock", "rubber approval stamps", "steel rules"],
+      "viewport": "A monumental routing docket fills the first screen: Agent Factory names the job, a live flow line crosses specialist stations, and Install is the first stamped action.",
+      "risk": "The factory metaphor becomes costume if stamps and docket details do not carry real workflow meaning.",
+      "sketch": ".impeccable/sketches/production-traveler.webp"
+    },
+    {
+      "id": "challenger-tensegrity",
+      "label": "The Tension Network",
+      "lineage": "tensegrity structures of carbon rods and tensioned cord",
+      "thesis": "Specialist agents hold one delivery system in balance through visible constraints and counterchecks.",
+      "case": "Strong mechanism fit, but the structural metaphor is less immediately familiar to software teams than a routed job.",
+      "palette": ["#17191D", "#E5E2DA", "#C63D32", "#7B8087"],
+      "materials": ["matte carbon rods", "red tension cord", "pale concrete"],
+      "viewport": "A large interactive constraint graph assembles across the hero while the install action anchors its base.",
+      "risk": "The spatial system can obscure the simple sequential path a new visitor needs first.",
+      "sketch": ".impeccable/sketches/tension-network.webp",
+      "hero": "https://impeccable.style/worlds/cards/kinetic-sculpture-automata-tensegrity-breathing-column-hero.webp",
+      "board": "https://impeccable.style/worlds/cards/kinetic-sculpture-automata-tensegrity-breathing-column.webp"
+    },
+    {
+      "id": "challenger-darkroom",
+      "label": "The Safelight Process",
+      "lineage": "printing darkrooms with timed baths and contact sheets",
+      "thesis": "A change emerges through deliberate stages, with previews and checks before commitment.",
+      "case": "The staged process is clear, though developers identify less directly with photographic craft.",
+      "palette": ["#2A170E", "#D78421", "#C7C1B7", "#12100F"],
+      "materials": ["amber safelight", "wet-print silver", "enamel trays"],
+      "viewport": "The workflow develops from ghosted gray to sharp black across a wide contact sheet, ending at a crisp install control.",
+      "risk": "Amber atmosphere may overpower documentation legibility and make a fast tool feel slow.",
+      "sketch": ".impeccable/sketches/safelight-process.webp",
+      "hero": "https://impeccable.style/worlds/cards/signals-instruments-darkroom-safelight-bay-hero.webp",
+      "board": "https://impeccable.style/worlds/cards/signals-instruments-darkroom-safelight-bay.webp"
+    },
+    {
+      "id": "challenger-drawcord",
+      "label": "The Drawcord System",
+      "lineage": "transforming garments with routed channels and tensioned cords",
+      "thesis": "One deliberate pull coordinates many hidden channels into a protective delivery shape.",
+      "case": "Beautiful orchestration metaphor, but it explains specialist verification less clearly than the assigned route.",
+      "palette": ["#121317", "#B79A55", "#4A4E57", "#E5E0D4"],
+      "materials": ["matte black silk", "gold drawcord", "graphite stitching"],
+      "viewport": "A black semicircle spans the page as one gold route gathers it through workflow stages toward installation.",
+      "risk": "Fashion materiality may feel detached from the evidence-led engineering audience.",
+      "sketch": ".impeccable/sketches/drawcord-system.webp",
+      "hero": "https://impeccable.style/worlds/cards/textiles-weave-drape-fashion-drawcord-transforming-cape-hero.webp",
+      "board": "https://impeccable.style/worlds/cards/textiles-weave-drape-fashion-drawcord-transforming-cape.webp"
+    }
+  ],
+  "reroll": true,
+  "canon": true,
+  "canonCard": {
+    "label": "The category standard",
+    "lineage": "polished developer-tool documentation",
+    "thesis": "A familiar product hero, feature summary, workflow section, and installation guide executed at a high craft level.",
+    "palette": ["#0F172A", "#F8FAFC", "#6366F1", "#CBD5E1"],
+    "materials": ["clean code panels", "restrained gradients", "modular documentation cards"],
+    "viewport": "A conventional headline and code sample introduce the product above a familiar feature grid.",
+    "risk": "Immediate comprehension comes at the cost of a distinctive Agent Factory identity.",
+    "sketch": ".impeccable/sketches/canon.webp"
+  },
+  "steer": true
+}
