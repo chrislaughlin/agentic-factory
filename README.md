@@ -8,13 +8,39 @@ The human starts one skill:
 $do-work <ticket, PRD, spec, URL, PR/MR, or task description>
 ```
 
+When the input is not yet a workable delivery item, start one step earlier:
+
+```text
+$shape-work <rough idea, customer problem, research, PRD, or opportunity>
+```
+
+`shape-work` turns inputs of any maturity into an evidence-labelled, dependency-ordered set of work items. It selects the lightest useful combination of Lean, Design Thinking, Dual-Track Agile, Scrum/Kanban, and phase-gated practices; asks for human decisions at explicit gates; and emits items using the complete `$do-work` intake contract.
+
 The parent agent resolves and sharpens the work, waits for plan approval, delegates bounded stages, publishes a ready change, watches CI and reviews, and stops at the human merge/deploy gate.
 
 ## Lifecycle
 
+Shaping and delivery are separate lifecycles. Shaping usually happens first, but its output may remain in a backlog until a human deliberately starts `do-work` for one approved item; there is no automatic handoff.
+
+### Shape work
+
 ```mermaid
 flowchart LR
-  H["Human + work reference"] --> D["do-work: inspect, grill, plan"]
+  I["Idea / evidence / PRD"] --> X["shape-work: discover, frame, slice"]
+  X --> G{"Investment gate"}
+  G -->|"experiment"| E["Learning item"]
+  E --> X
+  G -->|"reframe"| X
+  G -->|"park"| K["Decision record"]
+  G -->|"advance"| R["Review and approve work items"]
+  R --> B["Ready work items / backlog"]
+```
+
+### Do work
+
+```mermaid
+flowchart LR
+  H["Human selects one ready work reference"] --> D["do-work: inspect, grill, plan"]
   D -->|"explicit approval"| C["construct-work"]
   C --> S["review-security at pinned SHA"]
   C --> T["author-tests"]
@@ -37,6 +63,10 @@ After plan approval, each work item receives a dedicated task branch and sibling
 
 | Skill | Role |
 | --- | --- |
+| `shape-work` | User-invoked product discovery and work-item orchestrator |
+| `research-product` | Independent user, market, domain, and repository evidence research |
+| `challenge-product` | Independent assumptions, risks, options, and experiment challenge |
+| `review-work-items` | Independent work-item readiness and slicing review |
 | `do-work` | User-invoked lifecycle orchestrator |
 | `setup-agent-factory` | User-invoked repository configuration |
 | `construct-work` | Approved production implementation and remediation |

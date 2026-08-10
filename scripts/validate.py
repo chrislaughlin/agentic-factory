@@ -42,6 +42,7 @@ def validate() -> list[str]:
     errors: list[str] = []
     skill_names = sorted(path.name for path in SKILLS.iterdir() if path.is_dir())
     expected_skills = {
+        "shape-work",
         "do-work",
         "setup-agent-factory",
         "construct-work",
@@ -50,6 +51,9 @@ def validate() -> list[str]:
         "verify-qa",
         "review-code-quality",
         "watch-change",
+        "research-product",
+        "challenge-product",
+        "review-work-items",
     }
     if set(skill_names) != expected_skills:
         errors.append(f"skill set mismatch: {skill_names}")
@@ -83,7 +87,7 @@ def validate() -> list[str]:
             ui_text = ui.read_text(encoding="utf-8")
             if f"${name}" not in ui_text or "display_name:" not in ui_text:
                 errors.append(f"{ui.relative_to(ROOT)}: invalid UI metadata")
-            if name in {"do-work", "setup-agent-factory"} and "allow_implicit_invocation: false" not in ui_text:
+            if name in {"do-work", "setup-agent-factory", "shape-work"} and "allow_implicit_invocation: false" not in ui_text:
                 errors.append(f"{ui.relative_to(ROOT)}: user-invoked skill must disable implicit invocation")
 
     manifest = json.loads((AGENTS / "manifest.json").read_text(encoding="utf-8"))

@@ -29,6 +29,25 @@ class StaticContractTests(unittest.TestCase):
         self.assertIn("Permit three full remediation cycles", do_work)
         self.assertIn("Never merge or deploy", workflow)
 
+    def test_product_shaping_lifecycle_has_human_gates_and_delivery_contract(self):
+        shape = (ROOT / ".agents/skills/shape-work/SKILL.md").read_text()
+        lifecycle = (ROOT / ".agents/skills/shape-work/references/lifecycle.md").read_text()
+        contract = (ROOT / ".agents/skills/shape-work/references/work-item-contract.md").read_text()
+        methods = (ROOT / ".agents/skills/shape-work/references/methods.md").read_text()
+        self.assertIn("Ask exactly one material human decision at a time", shape)
+        self.assertIn("Wait for explicit human approval", shape)
+        self.assertIn("Never start implementation automatically", shape)
+        self.assertIn("advance", lifecycle)
+        self.assertIn("experiment", lifecycle)
+        self.assertIn("Evidence", contract)
+        self.assertIn("Acceptance criteria", contract)
+        self.assertIn("Lean", methods)
+        self.assertIn("Design Thinking", methods)
+        self.assertIn("Dual-Track", methods)
+        self.assertIn("Scrum", methods)
+        self.assertIn("Kanban", methods)
+        self.assertIn("Phase-gated", methods)
+
     def test_each_work_item_uses_an_isolated_git_worktree(self):
         do_work = (ROOT / ".agents/skills/do-work/SKILL.md").read_text()
         workflow = (ROOT / ".agents/skills/do-work/references/workflow.md").read_text()

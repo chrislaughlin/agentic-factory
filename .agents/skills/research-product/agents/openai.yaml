@@ -1,0 +1,4 @@
+interface:
+  display_name: "Research Product"
+  short_description: "Gather bounded source-backed product evidence."
+  default_prompt: "Use $research-product to investigate this delegated product question and return evidence with provenance."
