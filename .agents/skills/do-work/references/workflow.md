@@ -10,7 +10,7 @@
 
 ## Checkpoints and stages
 
-1. **Construction** — give the approved plan, acceptance criteria, baseline, allowed scope, absolute worktree path, and any remediation findings to `construct-work`. Require a clean production-code checkpoint commit made inside that worktree.
+1. **Construction** — give the approved plan, acceptance criteria, baseline, allowed scope, absolute worktree path, and any remediation findings to `construct-work`. Require a clean production-code checkpoint commit made inside that worktree. Before delegation, fingerprint the control checkout as HEAD plus NUL-safe staged, unstaged, and untracked path sets (never contents), and require the writable preflight. After return, the parent—not the specialist—requires `pass`, a returned SHA different from the expected input (unless explicitly approved as a no-op before delegation), task-worktree HEAD equal to that SHA, ancestry from expected input, a non-empty `git diff --name-only <expected>..<checkpoint>`, only approved paths, no unexpected owned-path dirt, unchanged control fingerprint, and valid environment invariants. Any mismatch blocks before verification. Report unexpected control paths and never reset, copy, stash, or delete them.
 2. **Parallel verification** — pin security to the construction commit. Start `review-security` and `author-tests` together. The tester may commit only tests and fixtures. Security must inspect the pinned tree with commit-addressed Git commands, not mutable working-tree contents.
 3. **Deterministic checks** — run every discovered relevant check and the full test suite from the task worktree. Pre-existing failures are not silently accepted; distinguish and evidence them.
 4. **QA** — give `verify-qa` the approved acceptance criteria, tested head, absolute worktree path, discovered QA context, and prior command evidence. Launch runtime surfaces from the worktree.
@@ -22,6 +22,7 @@
 - Combine findings without weakening or rewriting them.
 - Construction owns all production fixes. The test agent owns test/fixture changes.
 - Increment the current feedback batch's attempt count only after a complete failed verification sequence.
+- Worktree access/identity/write-preflight failures are infrastructure failures: preserve the journal and approved plan and retry only the same writable stage in the same valid worktree after correction. They do not consume a remediation attempt. Recreate only when recorded identity is missing or invalid.
 - A finding may be cleared only by its originating specialist on a new compatible revision.
 - Restart security, tests, QA, and code-quality review after any production change.
 - After test-only changes, rerun deterministic checks, QA, and code quality; rerun security if dependencies, executable fixtures, scripts, or attack surface changed.

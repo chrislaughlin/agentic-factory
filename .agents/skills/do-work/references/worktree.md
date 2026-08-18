@@ -37,3 +37,19 @@ Also detect matching untracked `.env` files that are not ignored. Do not copy th
 Every delegation includes the journaled environment-file paths. Before every checkpoint commit and push, revalidate that each path remains an untracked, ignored regular file physically contained in the task worktree and that no path appears in the Git index. A deleted file, changed ignore rule, staged environment file, symlink substitution, or containment failure is blocked. Never use forced staging to bypass this invariant.
 
 The parent retains the worktree at human handoff and reports its path. Never remove it automatically. The human may remove it after inspection or merge with `git worktree remove <absolute-worktree-path>`; never recommend forced removal while it is dirty or contains unpushed commits.
+
+## Writable-agent preflight and dedicated root
+
+Generated worktrees live only under the canonical, physically resolved `${AGENT_FACTORY_WORKTREE_ROOT:-$HOME/.agent-factory/worktrees}` root, partitioned by repository key and work key. The root must be outside the control checkout and every registered worktree. Writable harness adapters grant only this root in addition to their normal workspace; never broaden them to unrestricted filesystem access. If the installed harness cannot safely grant this path, block before implementation.
+
+Before every writable stage—and before expensive code inspection—the specialist must use the absolute delegated path to verify the recorded Git common directory, registration, branch, expected HEAD, and that it is not the control checkout. It creates a uniquely named transient probe within the worktree, removes it immediately, and proves it is neither present nor staged. A failure returns `blocked` with paths and permission facts only. Never continue in the invoking directory. The parent fingerprints the control checkout before delegation and independently checks it afterward as defined in [workflow.md](workflow.md).
+
+## Runtime environment parity
+
+Environment readiness means the worktree can run the repository, not merely that `.env` files were copied. Build the required-path candidate set from ignored/untracked regular files matching `.env`, `.env.*`, `*.env`, and `*.env.*` recursively, plus concrete paths named by tracked runtime evidence such as `--env-file`, Docker/Compose `env_file`, package/task scripts, dotenv/config loaders, dev-server configuration, and local-development documentation. Repository discovery records each evidence path and whether the requirement is tracked or local. Do not expose variable names or values.
+
+A tracked referenced path comes only from Git and is never overwritten. An existing local referenced path may be copied only when it is ignored and untracked; a required non-ignored untracked file blocks. Apply all containment, regular-file, non-symlink, destination-parent, byte/mode-preserving, and no-content-logging rules above to conventional and explicit candidates. Preserve identical relative paths, including nested packages. Never manufacture a missing file from a template.
+
+Record required tracked paths and copied local relative paths with path-only status in the journal. Immediately after create/recreate, verify every required tracked file exists and every local file exists as an ignored, untracked, contained regular file. On resume, revalidate without overwriting. Newly discovered requirements may add only a missing safe file using the same rules; an existing missing, changed-type, symlinked, tracked, or non-ignored destination blocks rather than being silently replaced.
+
+Run the same parity check before construction, every checkpoint commit, every push, and before `verify-qa` or any runtime launch. Runtime must not start while a required path is absent or unsafe. Environment files must remain unstaged and uncommittable throughout.

@@ -3,6 +3,8 @@ description: Add and run tests while modifying only tests and fixtures.
 mode: subagent
 permission:
   edit: allow
+  external_directory:
+    "~/.agent-factory/worktrees/**": allow
   bash: allow
   skill:
     "author-tests": allow

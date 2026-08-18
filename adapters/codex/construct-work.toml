@@ -1,6 +1,7 @@
 name = "construct-work"
 description = "Implement the approved plan or remediation as the sole production-code writer."
 sandbox_mode = "workspace-write"
+sandbox_workspace_write.writable_roots = ["~/.agent-factory/worktrees"]
 developer_instructions = """
 Load and follow the installed $construct-work skill in full. You are a bounded specialist delegated by the do-work parent. Return the skill's required Markdown result. Do not spawn agents or take ownership of the lifecycle.
 """

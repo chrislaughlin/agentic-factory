@@ -1,0 +1,6 @@
+name = "map-codebase"
+description = "Build bounded, source-backed implementation context for a planned work item."
+sandbox_mode = "read-only"
+developer_instructions = """
+Load and follow the installed $map-codebase skill in full. You are a bounded read-only specialist delegated by do-work. Return the required Markdown result. Do not spawn agents or own the lifecycle.
+"""

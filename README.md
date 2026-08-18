@@ -41,7 +41,10 @@ flowchart LR
 ```mermaid
 flowchart LR
   H["Human selects one ready work reference"] --> D["do-work: inspect, grill, plan"]
-  D -->|"explicit approval"| C["construct-work"]
+  D --> MC["map-codebase"]
+  MC --> DS["design-solution"]
+  DS --> RTP["review-technical-plan when risk warrants"]
+  RTP -->|"explicit approval"| C["construct-work"]
   C --> S["review-security at pinned SHA"]
   C --> T["author-tests"]
   S --> Q["verify-qa"]
@@ -57,7 +60,7 @@ flowchart LR
 
 `do-work` always remains the orchestrator. Specialists cannot spawn agents or inherit the lifecycle. Production code has one writer (`construct-work`); security, QA, code-quality review, and remote monitoring are read-only; `author-tests` may change only tests and fixtures.
 
-After plan approval, each work item receives a dedicated task branch and sibling Git worktree created from the recorded baseline. Ignored local `.env` files are copied from the journaled invoking checkout into matching relative paths without exposing their contents; unsafe symlinks, collisions, modified tracked files, and non-ignored environment files block delegation. Construction, tests, runtime QA, review, publication, and remediation use that worktree; the checkout where the human invoked `do-work` remains untouched. The journal lives in the Git common directory and records both absolute checkout paths for safe resumption. Agent Factory retains the worktree at handoff so the human can inspect it and remove it after review or merge.
+After plan approval, each work item receives a dedicated task branch and Git worktree under the narrowly writable Agent Factory worktree root. Writable stages preflight checkout identity and access, and the parent independently attests every construction checkpoint before verification. Required ignored local environment files—including repository-referenced nonstandard names—are copied from the journaled invoking checkout into matching relative paths without exposing their contents; unsafe symlinks, collisions, modified tracked files, and non-ignored environment files block delegation. Construction, tests, runtime QA, review, publication, and remediation use that worktree; the checkout where the human invoked `do-work` remains untouched. The journal lives in the Git common directory and records both absolute checkout paths for safe resumption. Agent Factory retains the worktree at handoff so the human can inspect it and remove it after review or merge.
 
 ## Included skills
 
@@ -68,6 +71,9 @@ After plan approval, each work item receives a dedicated task branch and sibling
 | `challenge-product` | Independent assumptions, risks, options, and experiment challenge |
 | `review-work-items` | Independent work-item readiness and slicing review |
 | `do-work` | User-invoked lifecycle orchestrator |
+| `map-codebase` | Bounded, evidence-backed implementation-context mapping |
+| `design-solution` | Coherent advisory Technical Blueprint design |
+| `review-technical-plan` | Risk-triggered independent blueprint challenge |
 | `construct-work` | Approved production implementation and remediation |
 | `author-tests` | Test/fixture authoring and deterministic checks |
 | `review-security` | Pinned-revision security review |
@@ -108,11 +114,11 @@ The discovered context and its sources are recorded in the local work journal un
 
 ## Operating rules
 
-- Planning asks one material human decision at a time and recommends an answer. Repository facts are discovered, not asked.
+- Planning aggressively eliminates material ambiguity, asks one human decision at a time with a recommended answer, and re-enters questioning after mapping, design, or plan review. Repository facts are discovered, not asked.
 - Repository discovery happens within every `do-work` run; it never requires an initialization hook, setup skill, or generated project contract.
 - No code changes begin until the human explicitly approves a decision-complete plan.
 - Every approved work item runs in its own Git worktree; unrelated changes in the invoking checkout are neither stashed nor copied into it.
-- New worktrees receive a one-time copy of ignored local `.env` and `.env.*` regular files, while tracked templates continue to come from Git. Copied paths are revalidated before every checkpoint commit and push so later ignore-rule changes cannot expose them.
+- New worktrees reproduce safely discoverable ignored local runtime environment files, including explicit `env_file` paths, while tracked templates continue to come from Git. Copied paths are revalidated before every checkpoint commit and push so later ignore-rule changes cannot expose them.
 - Oversized requests are sliced and wait for the human to select a slice.
 - Construction and test changes become separate Git checkpoint commits. Security reviews the immutable construction SHA while tests run in parallel.
 - QA requires runtime evidence for observable behavior. Missing required runtime access is blocked, not waived.
