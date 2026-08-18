@@ -1,0 +1,4 @@
+interface:
+  display_name: "Map Codebase"
+  short_description: "Build bounded, source-backed implementation context for a planned work item."
+  default_prompt: "Use $map-codebase for this bounded planning task."

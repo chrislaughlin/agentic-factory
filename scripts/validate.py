@@ -53,6 +53,9 @@ def validate() -> list[str]:
         "research-product",
         "challenge-product",
         "review-work-items",
+        "map-codebase",
+        "design-solution",
+        "review-technical-plan",
     }
     if set(skill_names) != expected_skills:
         errors.append(f"skill set mismatch: {skill_names}")

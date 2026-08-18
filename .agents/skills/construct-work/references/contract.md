@@ -12,6 +12,7 @@
 
 - Production code has one writer: this role.
 - Run every repository command and make every change inside the delegated worktree. Verify its Git common directory, branch, and expected head before editing; never write to the control checkout or another worktree.
+- Before reading implementation code, verify the registered common directory, task branch, and HEAD using `git -C <worktree>`; verify it differs from the control checkout; create and immediately remove a harmless unique probe file inside the worktree; and confirm it is absent from Git status. On any failure, clean up and return `blocked` with the path/permission error before analysis. Never stage the probe or fall back to another checkout.
 - Never edit tests or fixtures unless the approved plan explicitly makes them production artifacts; leave verification coverage to `author-tests`.
 - Never overwrite unrelated dirty changes, rewrite public history, use destructive Git recovery, or commit secrets.
 - Resolve every delegated finding or return it as blocked with concrete evidence. Do not silently skip it.
@@ -23,7 +24,7 @@
 ```markdown
 # Construction result
 - Status: pass | fail | blocked
-- Revision: <checkpoint SHA or unchanged SHA>
+- Revision: <checkpoint SHA>
 - Baseline: <input SHA>
 
 ## Summary
@@ -42,4 +43,4 @@
 - <none or exact blocker>
 ```
 
-Return `pass` only when the checkpoint exists, changed paths are within scope, and required construction checks pass. A failed command or unresolved authorized finding is `fail`; missing authority, credentials, or prerequisites is `blocked`.
+Return `pass` only when a new non-empty checkpoint exists, changed paths are within scope, and required construction checks pass. An unchanged revision is never successful initial construction unless the parent explicitly delegated an approved no-op. A failed command or unresolved authorized finding is `fail`; missing authority, credentials, or prerequisites is `blocked`.

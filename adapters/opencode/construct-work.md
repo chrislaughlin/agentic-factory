@@ -3,6 +3,8 @@ description: Implement the approved plan or remediation as the sole production-c
 mode: subagent
 permission:
   edit: allow
+  external_directory:
+    "~/.agent-factory/worktrees/**": allow
   bash: allow
   skill:
     "construct-work": allow

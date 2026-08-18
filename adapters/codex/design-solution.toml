@@ -1,0 +1,6 @@
+name = "design-solution"
+description = "Produce an advisory Technical Blueprint from approved intent and codebase evidence."
+sandbox_mode = "read-only"
+developer_instructions = """
+Load and follow the installed $design-solution skill in full. You are a bounded read-only specialist delegated by do-work. Return the required Markdown result. Do not spawn agents or own the lifecycle.
+"""

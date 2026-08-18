@@ -129,6 +129,39 @@ class StaticContractTests(unittest.TestCase):
         self.assertTrue(scenarios["worktree_isolation"]["block_destination_symlink_ancestors"])
         self.assertEqual(scenarios["human_boundary"]["agent_must_not"], ["merge", "deploy"])
 
+    def test_planning_specialists_and_iterative_human_gate(self):
+        manifest = json.loads((ROOT / "agents/manifest.json").read_text())
+        for role in ("map-codebase", "design-solution", "review-technical-plan"):
+            self.assertEqual(manifest["roles"][role]["permission"], "read-only")
+            skill = (ROOT / ".agents/skills" / role / "SKILL.md").read_text()
+            self.assertIn("read-only", skill)
+            self.assertIn("do not spawn agents", skill)
+        do_work = (ROOT / ".agents/skills/do-work/SKILL.md").read_text()
+        self.assertLess(do_work.index("`map-codebase`"), do_work.index("`design-solution`"))
+        self.assertIn("Technical Blueprint", do_work)
+        self.assertIn("Wait for explicit approval", do_work)
+        self.assertIn("not for minimizing questions", do_work)
+
+    def test_construction_checkpoint_and_access_fail_closed(self):
+        workflow = (ROOT / ".agents/skills/do-work/references/workflow.md").read_text()
+        contract = (ROOT / ".agents/skills/construct-work/references/contract.md").read_text()
+        self.assertIn("non-empty `git diff --name-only", workflow)
+        self.assertIn("unchanged control fingerprint", workflow)
+        self.assertIn("must not consume a remediation attempt", (ROOT / ".agents/skills/do-work/SKILL.md").read_text())
+        self.assertIn("Before reading implementation code", contract)
+        self.assertNotIn("checkpoint SHA or unchanged SHA", contract)
+
+    def test_environment_parity_and_scenario_regressions(self):
+        worktree = (ROOT / ".agents/skills/do-work/references/worktree.md").read_text()
+        self.assertIn("`*.env`", worktree)
+        self.assertIn("Docker/Compose `env_file`", worktree)
+        self.assertIn("before `verify-qa`", worktree)
+        scenarios = json.loads((ROOT / "tests/fixtures/scenarios.json").read_text())
+        for name in ("unchanged_construction_sha", "head_revision_mismatch", "empty_checkpoint_diff", "out_of_scope_checkpoint", "control_checkout_mutation"):
+            self.assertFalse(scenarios[name].get("verification_starts", False))
+        self.assertEqual(scenarios["worktree_access_failure"]["resume_stage"], "construction")
+        self.assertFalse(scenarios["environment_parity_failure"]["runtime_starts"])
+
 
 if __name__ == "__main__":
     unittest.main()

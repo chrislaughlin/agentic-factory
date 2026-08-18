@@ -3,6 +3,7 @@ name: author-tests
 description: Add and run tests while modifying only tests and fixtures.
 tools: [Read, Grep, Glob, Edit, Write, Bash, Skill]
 permissionMode: acceptEdits
+additionalDirectories: ["~/.agent-factory/worktrees"]
 skills: [author-tests]
 ---
 
