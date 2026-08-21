@@ -605,6 +605,36 @@ class Issue19PlanningTests(unittest.TestCase):
                 with self.assertRaisesRegex(validator.ArtifactValidationError, message):
                     validator.validate_artifact_document(artifact, baseline, ROOT, stage="approval")
 
+    def test_final_planning_acceptance_targets_use_explicit_change_surface_allowlist(self):
+        validator = load_artifact_validator()
+        baseline = subprocess.run(
+            ["git", "rev-parse", "HEAD"], cwd=ROOT, text=True, capture_output=True, check=True
+        ).stdout.strip()
+
+        valid = planning_artifact(validator, baseline)
+        valid["acceptance_mapping"][0]["targets"] = ["repository_map.change_surface"]
+        with_content_hash(validator, valid)
+        result = validator.validate_artifact_document(valid, baseline, ROOT, stage="approval")
+        self.assertEqual(result["status"], "complete")
+
+        for target in (
+            "repository_map.unknowns",
+            "repository_map.entry_points",
+            "repository_map.dependencies",
+            "repository_map.verification",
+        ):
+            with self.subTest(target=target):
+                invalid = planning_artifact(validator, baseline)
+                invalid["acceptance_mapping"][0]["targets"] = [target]
+                with_content_hash(validator, invalid)
+                with self.assertRaisesRegex(
+                    validator.ArtifactValidationError,
+                    "unknown implementation/change ID or path",
+                ):
+                    validator.validate_artifact_document(
+                        invalid, baseline, ROOT, stage="approval"
+                    )
+
     def test_final_planning_result_requires_evidence_and_traceability(self):
         validator = load_artifact_validator()
         baseline = subprocess.run(

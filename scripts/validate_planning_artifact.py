@@ -29,6 +29,13 @@ PLANNING_EVIDENCE_LISTS = (
     "dependencies",
     "verification",
 )
+# Acceptance mappings in a planning result may cover only the repository map
+# itself or its explicitly declared implementation/change surface.  Other map
+# fields are evidence, not implementation coverage.
+PLANNING_IMPLEMENTATION_TARGETS = frozenset({
+    "repository_map",
+    "repository_map.change_surface",
+})
 
 # Final blueprints must describe a construction-ready change, not merely satisfy
 # the shape of the JSON contract.  These paths are intentionally expressed in
@@ -297,7 +304,10 @@ def _change_reference_exists(artifact: dict[str, Any], reference: str) -> bool:
     if not isinstance(reference, str) or not reference.strip():
         return False
     reference = reference.strip()
-    root = "repository_map" if artifact.get("schema_version") == "planning-result.v1" else "implementation"
+    if artifact.get("schema_version") == "planning-result.v1":
+        return reference in PLANNING_IMPLEMENTATION_TARGETS
+
+    root = "implementation"
     if reference == root:
         return True
     if reference.startswith(root + "."):
@@ -365,7 +375,10 @@ def _validate_traceability(artifact: dict[str, Any], require_non_empty: bool) ->
                     f"artifact.acceptance_mapping[{index}].targets references unknown "
                     f"implementation/change ID or path {target!r}"
                 )
-            if target == implementation_root or target.startswith(implementation_root + "."):
+            if (
+                target == implementation_root
+                or target.startswith(implementation_root + ".")
+            ):
                 covered_implementation = True
 
     verified_acceptance = set()
