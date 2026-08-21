@@ -16,6 +16,8 @@ AGENTS = ROOT / "agents"
 NAME_RE = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
 LINK_RE = re.compile(r"\[[^]]+\]\(([^)]+)\)")
 REMOVED_PATHS = ["src", "test", "package.json", "pnpm-lock.yaml", "tsconfig.json"]
+CLAUDE_READ_ONLY_TOOLS = {"Read", "Grep", "Glob", "Skill"}
+CLAUDE_DISALLOWED_EDIT_TOOLS = {"Edit", "Write", "NotebookEdit"}
 
 
 def frontmatter(path: Path) -> tuple[dict[str, str], str]:
@@ -36,6 +38,18 @@ def frontmatter(path: Path) -> tuple[dict[str, str], str]:
         key, value = line.split(":", 1)
         values[key.strip()] = value.strip()
     return values, text
+
+
+def inline_list(value: str | None) -> set[str] | None:
+    """Parse the simple inline lists used by Claude adapter frontmatter."""
+    if value is None or not (value.startswith("[") and value.endswith("]")):
+        return None
+    items = value[1:-1].split(",")
+    return {
+        item.strip().strip("\"'")
+        for item in items
+        if item.strip()
+    }
 
 
 def validate() -> list[str]:
@@ -134,7 +148,16 @@ def validate() -> list[str]:
         if permission == "read-only":
             if 'sandbox_mode = "read-only"' not in codex:
                 errors.append(f"Codex {name} is not read-only")
-            if "disallowedTools: [Edit, Write, NotebookEdit]" not in claude:
+            claude_meta, _ = frontmatter(ADAPTERS / "claude" / f"{name}.md")
+            claude_tools = inline_list(claude_meta.get("tools"))
+            if claude_tools != CLAUDE_READ_ONLY_TOOLS:
+                errors.append(
+                    f"Claude {name} must expose only read-only tools: "
+                    f"{sorted(CLAUDE_READ_ONLY_TOOLS)}"
+                )
+            if claude_meta.get("permissionMode") != "plan":
+                errors.append(f"Claude {name} must use permissionMode: plan")
+            if inline_list(claude_meta.get("disallowedTools")) != CLAUDE_DISALLOWED_EDIT_TOOLS:
                 errors.append(f"Claude {name} is not read-only")
             if "edit: deny" not in opencode:
                 errors.append(f"OpenCode {name} is not read-only")

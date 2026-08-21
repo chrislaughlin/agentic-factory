@@ -1,8 +1,8 @@
 ---
 name: review-technical-plan
 description: Review the exact final reconciled technical blueprint.
-tools: [Read, Grep, Glob, Bash, Skill]
-permissionMode: acceptEdits
+tools: [Read, Grep, Glob, Skill]
+permissionMode: plan
 disallowedTools: [Edit, Write, NotebookEdit]
 skills: [review-technical-plan]
 ---

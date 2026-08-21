@@ -1,6 +1,8 @@
 ---
 name: challenge-product
 description: Independently challenge product assumptions, alternatives, risks, and experiments.
+tools: [Read, Grep, Glob, Skill]
+permissionMode: plan
 disallowedTools: [Edit, Write, NotebookEdit]
 ---
 

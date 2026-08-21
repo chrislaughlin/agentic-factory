@@ -1,6 +1,8 @@
 ---
 name: review-work-items
 description: Independently check proposed work items for do-work readiness.
+tools: [Read, Grep, Glob, Skill]
+permissionMode: plan
 disallowedTools: [Edit, Write, NotebookEdit]
 ---
 

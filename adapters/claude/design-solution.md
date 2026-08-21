@@ -1,8 +1,8 @@
 ---
 name: design-solution
 description: Produce a versioned technical blueprint from approved evidence.
-tools: [Read, Grep, Glob, Bash, Skill]
-permissionMode: acceptEdits
+tools: [Read, Grep, Glob, Skill]
+permissionMode: plan
 disallowedTools: [Edit, Write, NotebookEdit]
 skills: [design-solution]
 ---

@@ -1,8 +1,8 @@
 ---
 name: map-codebase
 description: Produce an evidence-led repository map for solution planning.
-tools: [Read, Grep, Glob, Bash, Skill]
-permissionMode: acceptEdits
+tools: [Read, Grep, Glob, Skill]
+permissionMode: plan
 disallowedTools: [Edit, Write, NotebookEdit]
 skills: [map-codebase]
 ---

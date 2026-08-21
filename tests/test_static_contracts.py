@@ -21,6 +21,19 @@ class StaticContractTests(unittest.TestCase):
     def test_repository_contracts_validate(self):
         self.assertEqual(load_validator().validate(), [])
 
+    def test_read_only_claude_adapters_have_no_mutation_capability(self):
+        manifest = json.loads((ROOT / "agents/manifest.json").read_text())
+        for role, metadata in manifest["roles"].items():
+            if metadata["permission"] != "read-only":
+                continue
+            adapter = (ROOT / "adapters/claude" / f"{role}.md").read_text()
+            with self.subTest(role=role):
+                self.assertIn("tools: [Read, Grep, Glob, Skill]", adapter)
+                self.assertIn("permissionMode: plan", adapter)
+                self.assertIn("disallowedTools: [Edit, Write, NotebookEdit]", adapter)
+                self.assertNotIn("Bash", adapter)
+                self.assertNotIn("permissionMode: acceptEdits", adapter)
+
     def test_orchestrator_contains_required_gates(self):
         do_work = (ROOT / ".agents/skills/do-work/SKILL.md").read_text()
         workflow = (ROOT / ".agents/skills/do-work/references/workflow.md").read_text()
