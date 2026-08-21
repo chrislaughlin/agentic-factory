@@ -3,7 +3,6 @@ description: Produce an evidence-led repository map for solution planning.
 mode: subagent
 permission:
   edit: deny
-  bash: allow
   skill:
     "map-codebase": allow
 ---

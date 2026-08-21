@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import importlib.util
+import hashlib
 import json
 import subprocess
 import tempfile
@@ -17,6 +18,22 @@ def load_evaluator():
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
+
+
+def load_artifact_validator():
+    path = ROOT / "scripts" / "validate_planning_artifact.py"
+    spec = importlib.util.spec_from_file_location("planning_artifact_validator", path)
+    assert spec and spec.loader
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def with_content_hash(validator, artifact):
+    artifact["content_hash"] = "sha256:" + hashlib.sha256(
+        validator.canonicalize_artifact(artifact)
+    ).hexdigest()
+    return artifact
 
 
 class Issue19PlanningTests(unittest.TestCase):
@@ -155,6 +172,84 @@ class Issue19PlanningTests(unittest.TestCase):
                 self.assertIn('sandbox_mode = "workspace-write"', codex)
                 self.assertIn("tests and fixtures", canonical)
                 self.assertIn("edit: allow", opencode)
+
+    def test_planning_artifact_gate_rejects_tampering_and_missing_revision_context(self):
+        validator = load_artifact_validator()
+        baseline = subprocess.run(
+            ["git", "rev-parse", "HEAD"], cwd=ROOT, text=True, capture_output=True, check=True
+        ).stdout.strip()
+        artifact = {
+            "schema_version": "planning-result.v1",
+            "artifact_id": "map-001",
+            "baseline_sha": baseline,
+            "content_hash": "",
+            "status": "complete",
+            "summary": "A valid planning artifact.",
+            "repository_map": {},
+            "unresolved_decisions": [],
+            "acceptance_mapping": [],
+            "verification_mapping": [],
+        }
+        with_content_hash(validator, artifact)
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "artifact.json"
+            path.write_text(json.dumps(artifact), encoding="utf-8")
+            valid = validator.validate_artifact(path, baseline, ROOT)
+            self.assertEqual(valid["baseline_sha"], baseline)
+
+            tampered = dict(artifact, summary="Tampered after approval")
+            path.write_text(json.dumps(tampered), encoding="utf-8")
+            with self.assertRaisesRegex(validator.ArtifactValidationError, "content_hash mismatch"):
+                validator.validate_artifact(path, baseline, ROOT)
+
+            path.write_text(json.dumps(artifact), encoding="utf-8")
+            with self.assertRaisesRegex(validator.ArtifactValidationError, "expected Git revision context"):
+                validator.validate_artifact(path, None, ROOT)
+
+            missing_revision = dict(artifact)
+            missing_revision.pop("baseline_sha")
+            with_content_hash(validator, missing_revision)
+            path.write_text(json.dumps(missing_revision), encoding="utf-8")
+            with self.assertRaisesRegex(validator.ArtifactValidationError, "baseline_sha"):
+                validator.validate_artifact(path, baseline, ROOT)
+
+    def test_planning_artifact_gate_rejects_invalid_or_mismatched_revision(self):
+        validator = load_artifact_validator()
+        baseline = subprocess.run(
+            ["git", "rev-parse", "HEAD"], cwd=ROOT, text=True, capture_output=True, check=True
+        ).stdout.strip()
+        artifact = {
+            "schema_version": "technical-blueprint.v1",
+            "artifact_id": "blueprint-001",
+            "baseline_sha": baseline,
+            "content_hash": "",
+            "status": "complete",
+            "summary": "A valid blueprint.",
+            "scope": {},
+            "interfaces": {},
+            "implementation": {},
+            "risk_controls": {},
+            "unresolved_decisions": [],
+            "acceptance_mapping": [],
+            "verification_mapping": [],
+        }
+        with_content_hash(validator, artifact)
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "artifact.json"
+            path.write_text(json.dumps(artifact), encoding="utf-8")
+            invalid_revision = dict(artifact, baseline_sha="0" * 40)
+            with_content_hash(validator, invalid_revision)
+            path.write_text(json.dumps(invalid_revision), encoding="utf-8")
+            with self.assertRaisesRegex(validator.ArtifactValidationError, "cannot be resolved"):
+                validator.validate_artifact(path, baseline, ROOT)
+
+            other_revision = subprocess.run(
+                ["git", "rev-parse", "HEAD^"], cwd=ROOT, text=True, capture_output=True, check=True
+            ).stdout.strip()
+            mismatched = with_content_hash(validator, dict(artifact, baseline_sha=other_revision))
+            path.write_text(json.dumps(mismatched), encoding="utf-8")
+            with self.assertRaisesRegex(validator.ArtifactValidationError, "does not resolve to the expected"):
+                validator.validate_artifact(path, baseline, ROOT)
 
 
 if __name__ == "__main__":

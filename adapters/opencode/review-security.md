@@ -3,7 +3,6 @@ description: Audit the pinned construction revision and report validated securit
 mode: subagent
 permission:
   edit: deny
-  bash: allow
   skill:
     "review-security": allow
 ---

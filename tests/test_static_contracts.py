@@ -34,6 +34,16 @@ class StaticContractTests(unittest.TestCase):
                 self.assertNotIn("Bash", adapter)
                 self.assertNotIn("permissionMode: acceptEdits", adapter)
 
+    def test_read_only_opencode_adapters_have_no_shell_capability(self):
+        manifest = json.loads((ROOT / "agents/manifest.json").read_text())
+        for role, metadata in manifest["roles"].items():
+            if metadata["permission"] != "read-only":
+                continue
+            adapter = (ROOT / "adapters/opencode" / f"{role}.md").read_text()
+            with self.subTest(role=role):
+                self.assertIn("edit: deny", adapter)
+                self.assertNotRegex(adapter, r"(?m)^\s*bash\s*:\s*(?:allow|ask)\s*$")
+
     def test_orchestrator_contains_required_gates(self):
         do_work = (ROOT / ".agents/skills/do-work/SKILL.md").read_text()
         workflow = (ROOT / ".agents/skills/do-work/references/workflow.md").read_text()
@@ -74,6 +84,7 @@ class StaticContractTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn('"required_recall_percent":100.0', result.stdout)
         self.assertIn('"forbidden_matches":0', result.stdout)
+        self.assertIn("validate_planning_artifact.py", (ROOT / ".agents/skills/do-work/references/planning.md").read_text())
 
     def test_malformed_or_missing_eval_input_is_blocked(self):
         missing = subprocess.run(

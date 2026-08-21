@@ -117,6 +117,14 @@ Planning artifacts use the versioned contracts in [`contracts`](contracts): `pla
 python3 scripts/evaluate_planning.py
 ```
 
+Before technical-plan review and explicit approval, validate the exact private artifact against its recorded baseline with the local, standard-library gate:
+
+```sh
+python3 scripts/validate_planning_artifact.py --artifact <artifact.json> --expected-revision <recorded-baseline-sha> --repository <repository-root>
+```
+
+It recomputes the canonical content hash and resolves the baseline locally; missing expected revision context, tampering, and revision mismatches fail closed.
+
 It passes only with 100% required assertion recall and zero forbidden matches; missing or malformed input is blocked.
 
 ## Operating rules

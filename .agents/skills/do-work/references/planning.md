@@ -18,6 +18,8 @@
 
 Canonical JSON hashes use sorted object keys, UTF-8, compact separators, and omit only `content_hash`. A hash mismatch makes downstream review evidence stale. Live planning artifacts and model outputs remain private; only sanitized fixtures and recorded results belong in Git.
 
+Before technical-plan review and again before explicit approval, run the portable local gate `python3 scripts/validate_planning_artifact.py --artifact <artifact.json> --expected-revision <recorded-baseline-sha> --repository <repository-root>`. It recomputes `content_hash` and resolves `baseline_sha` against the expected Git revision without network or model access. Missing expected revision context, a malformed or tampered artifact, or an unresolved/mismatched revision fails closed; never substitute syntax validation for this gate.
+
 ## Construction boundary
 
 `construct-work` is the sole production-code writer. No planning specialist edits production sources, and no specialist takes ownership of the lifecycle. The parent retains the construction, verification, QA, publication, monitoring, merge, and deployment gates.

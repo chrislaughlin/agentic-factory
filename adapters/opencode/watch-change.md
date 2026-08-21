@@ -3,7 +3,6 @@ description: Monitor CI and review feedback on the published PR or MR.
 mode: subagent
 permission:
   edit: deny
-  bash: allow
   skill:
     "watch-change": allow
 ---

@@ -18,6 +18,7 @@ LINK_RE = re.compile(r"\[[^]]+\]\(([^)]+)\)")
 REMOVED_PATHS = ["src", "test", "package.json", "pnpm-lock.yaml", "tsconfig.json"]
 CLAUDE_READ_ONLY_TOOLS = {"Read", "Grep", "Glob", "Skill"}
 CLAUDE_DISALLOWED_EDIT_TOOLS = {"Edit", "Write", "NotebookEdit"}
+OPENCODE_BASH_RE = re.compile(r"(?m)^\s*bash\s*:\s*(\S+)\s*$")
 
 
 def frontmatter(path: Path) -> tuple[dict[str, str], str]:
@@ -161,6 +162,9 @@ def validate() -> list[str]:
                 errors.append(f"Claude {name} is not read-only")
             if "edit: deny" not in opencode:
                 errors.append(f"OpenCode {name} is not read-only")
+            bash_permission = OPENCODE_BASH_RE.search(opencode)
+            if bash_permission and bash_permission.group(1) != "deny":
+                errors.append(f"OpenCode {name} exposes a non-denied bash permission")
         elif 'sandbox_mode = "workspace-write"' not in codex or "edit: allow" not in opencode:
             errors.append(f"{name} is missing write capability")
 
@@ -190,6 +194,11 @@ def validate() -> list[str]:
             errors.append(f"{path.relative_to(ROOT)}: unreadable contract: {exc}")
     if not (ROOT / "scripts" / "evaluate_planning.py").is_file():
         errors.append("planning evaluator is missing")
+    if not (ROOT / "scripts" / "validate_planning_artifact.py").is_file():
+        errors.append("planning artifact validator is missing")
+    planning = ROOT / ".agents" / "skills" / "do-work" / "references" / "planning.md"
+    if planning.is_file() and "validate_planning_artifact.py" not in planning.read_text(encoding="utf-8"):
+        errors.append("planning artifact validator is not wired into the do-work gate")
     return errors
 
 
