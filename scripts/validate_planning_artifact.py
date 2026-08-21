@@ -20,6 +20,9 @@ CONTRACTS = {
     "planning-result.v1": ROOT / "contracts" / "planning-result-v1.json",
     "technical-blueprint.v1": ROOT / "contracts" / "technical-blueprint-v1.json",
 }
+ADVISORY_STAGE = "advisory"
+FINAL_STAGES = frozenset({"final", "review", "approval"})
+VALIDATION_STAGES = (ADVISORY_STAGE, "final", "review", "approval")
 
 
 class ArtifactValidationError(ValueError):
@@ -147,6 +150,34 @@ def _validate_contract(artifact: dict[str, Any]) -> tuple[str, dict[str, Any]]:
     return schema_version, contract
 
 
+def _validate_stage(artifact: dict[str, Any], stage: str) -> None:
+    if stage not in VALIDATION_STAGES:
+        raise ArtifactValidationError(
+            f"unsupported validation stage {stage!r}; expected one of {', '.join(VALIDATION_STAGES)}"
+        )
+    if stage == ADVISORY_STAGE:
+        return
+    if stage not in FINAL_STAGES:
+        raise ArtifactValidationError(f"unsupported validation stage {stage!r}")
+
+    if artifact["status"] != "complete":
+        raise ArtifactValidationError(
+            f"{stage} validation requires artifact.status to be 'complete'; "
+            f"got {artifact['status']!r}"
+        )
+
+    unresolved = [
+        decision["id"]
+        for decision in artifact["unresolved_decisions"]
+        if decision["status"] == "unresolved"
+    ]
+    if unresolved:
+        raise ArtifactValidationError(
+            "final validation requires no unresolved material decisions; "
+            f"unresolved decision IDs: {', '.join(unresolved)}"
+        )
+
+
 def _resolve_commit(repository: Path, revision: str, label: str) -> str:
     if not SHA_RE.fullmatch(revision):
         raise ArtifactValidationError(f"{label} is not a valid Git revision")
@@ -170,8 +201,9 @@ def validate_artifact(
     path: Path,
     expected_revision: str | None,
     repository: Path = ROOT,
+    stage: str = "approval",
 ) -> dict[str, str]:
-    """Validate the artifact contract and its integrity, failing closed."""
+    """Validate an artifact, failing closed for final review and approval stages."""
     if not expected_revision:
         raise ArtifactValidationError(
             "expected Git revision context is required; refusing to validate artifact"
@@ -179,6 +211,7 @@ def validate_artifact(
 
     artifact = _load_artifact(path)
     schema_version, _ = _validate_contract(artifact)
+    _validate_stage(artifact, stage)
     content_hash = artifact.get("content_hash")
     if not isinstance(content_hash, str) or not CONTENT_HASH_RE.fullmatch(content_hash):
         raise ArtifactValidationError("content_hash must match sha256:<64 lowercase hex characters>")
@@ -205,6 +238,7 @@ def validate_artifact(
         "kind": str(artifact["kind"]),
         "role": str(artifact["role"]),
         "status": str(artifact["status"]),
+        "stage": stage,
         "baseline_sha": baseline_resolved,
         "content_hash": computed_hash,
     }
@@ -218,9 +252,20 @@ def main(argv: list[str] | None = None) -> int:
         help="the baseline revision recorded by do-work; omitted context fails closed",
     )
     parser.add_argument("--repository", type=Path, default=ROOT)
+    parser.add_argument(
+        "--stage",
+        choices=VALIDATION_STAGES,
+        default="approval",
+        help="validation stage; advisory permits draft artifacts, final stages require completion",
+    )
     args = parser.parse_args(argv)
     try:
-        result = validate_artifact(args.artifact, args.expected_revision, args.repository)
+        result = validate_artifact(
+            args.artifact,
+            args.expected_revision,
+            args.repository,
+            stage=args.stage,
+        )
     except ArtifactValidationError as exc:
         print(f"ERROR: {exc}", file=sys.stderr)
         return 1

@@ -51,6 +51,7 @@ def planning_artifact(validator, baseline):
             "change_surface": [],
             "dependencies": [],
             "verification": [],
+            "unknowns": [],
         },
         "unresolved_decisions": [],
         "acceptance_mapping": [],
@@ -282,6 +283,13 @@ class Issue19PlanningTests(unittest.TestCase):
             with self.assertRaisesRegex(validator.ArtifactValidationError, "acceptance_mapping"):
                 validator.validate_artifact(path, baseline, ROOT)
 
+            missing_unknowns = planning_artifact(validator, baseline)
+            missing_unknowns["repository_map"].pop("unknowns")
+            with_content_hash(validator, missing_unknowns)
+            path.write_text(json.dumps(missing_unknowns), encoding="utf-8")
+            with self.assertRaisesRegex(validator.ArtifactValidationError, "unknowns"):
+                validator.validate_artifact(path, baseline, ROOT)
+
     def test_planning_artifact_gate_accepts_valid_result_and_blueprint(self):
         validator = load_artifact_validator()
         baseline = subprocess.run(
@@ -321,6 +329,38 @@ class Issue19PlanningTests(unittest.TestCase):
             path.write_text(json.dumps(mismatched), encoding="utf-8")
             with self.assertRaisesRegex(validator.ArtifactValidationError, "does not resolve to the expected"):
                 validator.validate_artifact(path, baseline, ROOT)
+
+    def test_planning_artifact_gate_requires_complete_decision_free_final_artifacts(self):
+        validator = load_artifact_validator()
+        baseline = subprocess.run(
+            ["git", "rev-parse", "HEAD"], cwd=ROOT, text=True, capture_output=True, check=True
+        ).stdout.strip()
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "artifact.json"
+            draft = blueprint_artifact(validator, baseline)
+            draft["status"] = "draft"
+            draft["unresolved_decisions"] = [{
+                "id": "decision-1",
+                "question": "Which behavior is required?",
+                "status": "unresolved",
+            }]
+            with_content_hash(validator, draft)
+            path.write_text(json.dumps(draft), encoding="utf-8")
+
+            for stage in ("final", "review", "approval"):
+                with self.subTest(stage=stage):
+                    with self.assertRaisesRegex(validator.ArtifactValidationError, "status.*complete"):
+                        validator.validate_artifact(path, baseline, ROOT, stage=stage)
+
+            advisory = validator.validate_artifact(path, baseline, ROOT, stage="advisory")
+            self.assertEqual(advisory["status"], "draft")
+            self.assertEqual(advisory["stage"], "advisory")
+
+            draft["status"] = "complete"
+            with_content_hash(validator, draft)
+            path.write_text(json.dumps(draft), encoding="utf-8")
+            with self.assertRaisesRegex(validator.ArtifactValidationError, "unresolved material decisions"):
+                validator.validate_artifact(path, baseline, ROOT, stage="approval")
 
 
 if __name__ == "__main__":

@@ -17,6 +17,6 @@ Use this skill as a bounded planning specialist. Inspect the repository without 
 
 ## Output
 
-Return a planning result conforming to [planning-result-v1](../do-work/references/contracts/planning-result-v1.md). The result must include an artifact ID, baseline SHA, content hash, unresolved decisions, acceptance mapping, and verification mapping. A map is read-only evidence: it does not authorize design or construction.
+Return a planning result conforming to [planning-result-v1](../do-work/references/contracts/planning-result-v1.md). The result must include an artifact ID, baseline SHA, content hash, `repository_map.unknowns` (use `[]` when no unknowns exist), unresolved decisions, acceptance mapping, and verification mapping. A map is read-only evidence: it does not authorize design or construction.
 
 Do not edit files, spawn agents, publish changes, or take ownership of the `do-work` lifecycle.

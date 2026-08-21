@@ -30,7 +30,7 @@
     "repository_map": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["entry_points", "change_surface", "dependencies", "verification"],
+      "required": ["entry_points", "change_surface", "dependencies", "verification", "unknowns"],
       "properties": {
         "entry_points": { "$ref": "#/$defs/evidence_list" },
         "change_surface": { "$ref": "#/$defs/evidence_list" },

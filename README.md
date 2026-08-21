@@ -120,8 +120,10 @@ python3 scripts/evaluate_planning.py
 Before technical-plan review and explicit approval, validate the exact private artifact against its recorded baseline with the local, standard-library gate:
 
 ```sh
-python3 scripts/validate_planning_artifact.py --artifact <artifact.json> --expected-revision <recorded-baseline-sha> --repository <repository-root>
+python3 scripts/validate_planning_artifact.py --stage approval --artifact <artifact.json> --expected-revision <recorded-baseline-sha> --repository <repository-root>
 ```
+
+Final `review` and `approval` validation requires a complete artifact with no unresolved decisions. Use `--stage advisory` only when explicitly validating a non-final draft.
 
 It recomputes the canonical content hash and resolves the baseline locally; missing expected revision context, tampering, and revision mismatches fail closed.
 

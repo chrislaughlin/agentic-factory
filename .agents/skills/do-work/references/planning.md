@@ -4,7 +4,7 @@
 
 1. **Initial questions** — establish the desired outcome, users or callers, constraints, deadline or rollout concern, and what must remain unchanged. Recommend an answer for each material choice and record the response.
 2. **Repository discovery** — inspect instructions, architecture, manifests, commands, runtime surfaces, Git identity, and relevant tests. Record sources in the private journal.
-3. **Mapping** — delegate or perform read-only `map-codebase`. Capture a `planning-result.v1` artifact with artifact ID, baseline SHA, content hash, unknowns, unresolved decisions, and acceptance/verification mappings.
+3. **Mapping** — delegate or perform read-only `map-codebase`. Capture a `planning-result.v1` artifact with artifact ID, baseline SHA, content hash, `repository_map.unknowns` (including `[]` when none exist), unresolved decisions, and acceptance/verification mappings.
 4. **Follow-up** — ask only the next material question exposed by the map. Stop when the decision is resolved or explicitly unresolved; never silently choose a consequential behavior.
 5. **Design** — delegate or perform read-only `design-solution`. Capture the exact `technical-blueprint.v1` artifact with scope, interfaces, implementation, risk controls, classification, unresolved decisions, and mappings.
 6. **Follow-up** — ask one material question at a time for design choices, compatibility, rollout, or failure handling. Update the artifact and content hash after each answer.
@@ -18,7 +18,7 @@
 
 Canonical JSON hashes use sorted object keys, UTF-8, compact separators, and omit only `content_hash`. A hash mismatch makes downstream review evidence stale. Live planning artifacts and model outputs remain private; only sanitized fixtures and recorded results belong in Git.
 
-Before technical-plan review and again before explicit approval, run the portable local gate `python3 scripts/validate_planning_artifact.py --artifact <artifact.json> --expected-revision <recorded-baseline-sha> --repository <repository-root>`. It recomputes `content_hash` and resolves `baseline_sha` against the expected Git revision without network or model access. Missing expected revision context, a malformed or tampered artifact, or an unresolved/mismatched revision fails closed; never substitute syntax validation for this gate.
+Before technical-plan review and again before explicit approval, run the portable local gate `python3 scripts/validate_planning_artifact.py --stage review` or `--stage approval` with the artifact, expected revision, and repository. Final stages require `status: complete` and no unresolved material decisions. Use `--stage advisory` only when explicitly validating a non-final draft. The gate recomputes `content_hash` and resolves `baseline_sha` against the expected Git revision without network or model access. Missing expected revision context, a malformed or tampered artifact, an incomplete final artifact, an unresolved final decision, or an unresolved/mismatched revision fails closed; never substitute syntax validation for this gate.
 
 ## Construction boundary
 
