@@ -1,7 +1,7 @@
 {
   "schema_version": "planning-eval.v1",
   "fixture_id": "sanitized-planning-loop",
-  "expected_revision": "7cd3cfea203cac7cae357bcf26c2348502f0733a",
+  "expected_revision": "205f260e7565a04c3e29780bbc357ef274925329",
   "recorded_result": {
     "source": "sanitized-structured-artifacts",
     "artifacts": [
@@ -10,8 +10,8 @@
         "kind": "planning-result",
         "role": "map-codebase",
         "artifact_id": "map-001",
-        "baseline_sha": "7cd3cfea203cac7cae357bcf26c2348502f0733a",
-        "content_hash": "sha256:3021fb49943cbc12eb7f448b2128cc81efd672661c854093b8394c5c80959d6e",
+        "baseline_sha": "205f260e7565a04c3e29780bbc357ef274925329",
+        "content_hash": "sha256:5b7d68577e74db0e10adcd0d01fc6f9fbe00c52fbe1e35cea6f2b87532789717",
         "status": "complete",
         "summary": "Mapped the repository and its construction gates.",
         "repository_map": {
@@ -30,8 +30,8 @@
         "kind": "technical-blueprint",
         "role": "design-solution",
         "artifact_id": "blueprint-001",
-        "baseline_sha": "7cd3cfea203cac7cae357bcf26c2348502f0733a",
-        "content_hash": "sha256:9b8c2ca1fd8a5d149511138e5ebc1b37f5e6e4a2c91f50677477c2173ceff42b",
+        "baseline_sha": "205f260e7565a04c3e29780bbc357ef274925329",
+        "content_hash": "sha256:0bb470383c267f9184228c1a69fc7a19b986ec59a0eced24de675e563e0b005b",
         "status": "complete",
         "change_classification": "security",
         "scope": {
@@ -61,8 +61,8 @@
   "required_assertions": [
     {"id": "planning-contract", "artifact_index": 0, "path": "schema_version", "equals": "planning-result.v1"},
     {"id": "blueprint-contract", "artifact_index": 1, "path": "schema_version", "equals": "technical-blueprint.v1"},
-    {"id": "planning-integrity", "artifact_index": 0, "path": "content_hash", "equals": "sha256:3021fb49943cbc12eb7f448b2128cc81efd672661c854093b8394c5c80959d6e"},
-    {"id": "blueprint-integrity", "artifact_index": 1, "path": "content_hash", "equals": "sha256:9b8c2ca1fd8a5d149511138e5ebc1b37f5e6e4a2c91f50677477c2173ceff42b"},
+    {"id": "planning-integrity", "artifact_index": 0, "path": "content_hash", "equals": "sha256:5b7d68577e74db0e10adcd0d01fc6f9fbe00c52fbe1e35cea6f2b87532789717"},
+    {"id": "blueprint-integrity", "artifact_index": 1, "path": "content_hash", "equals": "sha256:0bb470383c267f9184228c1a69fc7a19b986ec59a0eced24de675e563e0b005b"},
     {"id": "traceability", "artifact_index": 1, "path": "verification_mapping[0].source", "equals": "blueprint-acceptance"},
     {"id": "approval-gate", "artifact_index": 1, "path": "status", "equals": "complete"}
   ],

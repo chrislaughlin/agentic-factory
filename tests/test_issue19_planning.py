@@ -10,7 +10,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 EVALUATOR = ROOT / "scripts" / "evaluate_planning.py"
-FIXTURE_BASELINE = "7cd3cfea203cac7cae357bcf26c2348502f0733a"
+FIXTURE_BASELINE = "205f260e7565a04c3e29780bbc357ef274925329"
 
 
 def load_evaluator():
