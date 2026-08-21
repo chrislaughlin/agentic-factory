@@ -577,6 +577,34 @@ class Issue19PlanningTests(unittest.TestCase):
                 with self.assertRaisesRegex(validator.ArtifactValidationError, message):
                     validator.validate_artifact_document(artifact, baseline, ROOT, stage="approval")
 
+    def test_traceability_gate_rejects_nonexistent_dotted_path_bypasses(self):
+        validator = load_artifact_validator()
+        baseline = subprocess.run(
+            ["git", "rev-parse", "HEAD"], cwd=ROOT, text=True, capture_output=True, check=True
+        ).stdout.strip()
+        cases = {
+            "unknown-implementation-path": (
+                blueprint_artifact(validator, baseline),
+                lambda artifact: artifact["acceptance_mapping"][0]["targets"].__setitem__(
+                    1, "implementation.nonexistent"
+                ),
+                "unknown implementation/change ID or path",
+            ),
+            "unknown-repository-map-verification-path": (
+                planning_artifact(validator, baseline),
+                lambda artifact: artifact["verification_mapping"][0]["targets"].__setitem__(
+                    0, "repository_map.verification.nonexistent"
+                ),
+                "unknown verification ID or evidence path",
+            ),
+        }
+        for name, (artifact, mutate, message) in cases.items():
+            with self.subTest(name=name):
+                mutate(artifact)
+                with_content_hash(validator, artifact)
+                with self.assertRaisesRegex(validator.ArtifactValidationError, message):
+                    validator.validate_artifact_document(artifact, baseline, ROOT, stage="approval")
+
     def test_final_planning_result_requires_evidence_and_traceability(self):
         validator = load_artifact_validator()
         baseline = subprocess.run(

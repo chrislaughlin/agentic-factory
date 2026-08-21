@@ -298,8 +298,10 @@ def _change_reference_exists(artifact: dict[str, Any], reference: str) -> bool:
         return False
     reference = reference.strip()
     root = "repository_map" if artifact.get("schema_version") == "planning-result.v1" else "implementation"
-    if reference == root or reference.startswith(root + "."):
+    if reference == root:
         return True
+    if reference.startswith(root + "."):
+        return _artifact_path(artifact, reference) is not None
     if artifact.get("schema_version") == "technical-blueprint.v1":
         if reference in {"scope", "risk_controls"}:
             return True
@@ -315,9 +317,10 @@ def _verification_reference_exists(artifact: dict[str, Any], reference: str) -> 
     if not isinstance(reference, str) or not reference.strip():
         return False
     reference = reference.strip()
-    return artifact.get("schema_version") == "planning-result.v1" and (
-        reference == "repository_map.verification"
-        or reference.startswith("repository_map.verification.")
+    return (
+        artifact.get("schema_version") == "planning-result.v1"
+        and reference.startswith("repository_map.verification")
+        and _artifact_path(artifact, reference) is not None
     )
 
 def _validate_traceability(artifact: dict[str, Any], require_non_empty: bool) -> None:
