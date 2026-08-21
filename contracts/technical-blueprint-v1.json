@@ -86,6 +86,7 @@
     },
     "decision_list": { "type": "array", "items": { "$ref": "#/$defs/decision" } },
     "mapping": {
+      "description": "id is unique within the artifact; acceptance mappings define requirement IDs and implementation/change targets, while verification mappings reference those acceptance IDs and declare verification evidence targets.",
       "type": "object",
       "additionalProperties": false,
       "required": ["id", "source", "targets"],

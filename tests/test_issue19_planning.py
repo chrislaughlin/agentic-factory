@@ -48,15 +48,23 @@ def planning_artifact(validator, baseline):
         "status": "complete",
         "summary": "A valid planning artifact.",
         "repository_map": {
-            "entry_points": [],
-            "change_surface": [],
-            "dependencies": [],
-            "verification": [],
+            "entry_points": [{"claim": "Planning scripts are local entry points.", "sources": ["scripts/"]}],
+            "change_surface": [{"claim": "The validator is the relevant change surface.", "sources": ["scripts/validate_planning_artifact.py"]}],
+            "dependencies": [{"claim": "The implementation uses the standard library.", "sources": ["scripts/"]}],
+            "verification": [{"claim": "Focused tests verify the planning gate.", "sources": ["tests/test_issue19_planning.py"]}],
             "unknowns": [],
         },
         "unresolved_decisions": [],
-        "acceptance_mapping": [],
-        "verification_mapping": [],
+        "acceptance_mapping": [{
+            "id": "map-acceptance",
+            "source": "Repository context is mapped",
+            "targets": ["repository_map"],
+        }],
+        "verification_mapping": [{
+            "id": "map-verification",
+            "source": "map-acceptance",
+            "targets": ["tests/test_issue19_planning.py"],
+        }],
     })
 
 
@@ -95,7 +103,7 @@ def blueprint_artifact(validator, baseline):
         "verification_mapping": [{
             "id": "verification-1",
             "source": "acceptance-1",
-            "targets": ["test_planning_artifact_gate_rejects_semantically_empty_blueprints"],
+            "targets": ["tests/test_issue19_planning.py"],
         }],
     })
 
@@ -521,6 +529,98 @@ class Issue19PlanningTests(unittest.TestCase):
             path.write_text(json.dumps(blueprint), encoding="utf-8")
             result = validator.validate_artifact(path, baseline, ROOT, stage="approval")
             self.assertEqual(result["status"], "complete")
+
+    def test_traceability_gate_rejects_unknown_and_orphaned_references(self):
+        validator = load_artifact_validator()
+        baseline = subprocess.run(
+            ["git", "rev-parse", "HEAD"], cwd=ROOT, text=True, capture_output=True, check=True
+        ).stdout.strip()
+        cases = {
+            "unknown-acceptance-target": (
+                lambda artifact: artifact["acceptance_mapping"][0]["targets"].__setitem__(
+                    0, "implementation/missing-change"
+                ),
+                "unknown implementation/change ID or path",
+            ),
+            "unknown-verification-source": (
+                lambda artifact: artifact["verification_mapping"][0].__setitem__(
+                    "source", "acceptance-missing"
+                ),
+                "unknown acceptance/requirement ID",
+            ),
+            "unknown-verification-target": (
+                lambda artifact: artifact["verification_mapping"][0]["targets"].__setitem__(
+                    0, "tests/missing-verification.py"
+                ),
+                "unknown verification ID or evidence path",
+            ),
+            "duplicate-traceability-id": (
+                lambda artifact: artifact["verification_mapping"][0].__setitem__(
+                    "id", "acceptance-1"
+                ),
+                "IDs must be unique across the artifact",
+            ),
+            "orphaned-acceptance": (
+                lambda artifact: artifact["acceptance_mapping"].append({
+                    "id": "acceptance-orphan",
+                    "source": "An unverified requirement",
+                    "targets": ["implementation"],
+                }),
+                "orphaned acceptance/requirement IDs",
+            ),
+        }
+        for name, (mutate, message) in cases.items():
+            with self.subTest(name=name):
+                artifact = blueprint_artifact(validator, baseline)
+                mutate(artifact)
+                with_content_hash(validator, artifact)
+                with self.assertRaisesRegex(validator.ArtifactValidationError, message):
+                    validator.validate_artifact_document(artifact, baseline, ROOT, stage="approval")
+
+    def test_final_planning_result_requires_evidence_and_traceability(self):
+        validator = load_artifact_validator()
+        baseline = subprocess.run(
+            ["git", "rev-parse", "HEAD"], cwd=ROOT, text=True, capture_output=True, check=True
+        ).stdout.strip()
+        cases = {
+            "missing-repository-evidence": (
+                lambda artifact: artifact["repository_map"].__setitem__("change_surface", []),
+                "repository_map.change_surface evidence",
+            ),
+            "missing-acceptance-criteria": (
+                lambda artifact: artifact.__setitem__("acceptance_mapping", []),
+                "non-empty acceptance criteria mapping",
+            ),
+            "missing-verification-mapping": (
+                lambda artifact: artifact.__setitem__("verification_mapping", []),
+                "non-empty verification mapping",
+            ),
+            "missing-source-path": (
+                lambda artifact: artifact["repository_map"]["verification"][0]["sources"].__setitem__(
+                    0, "tests/missing-evidence.py"
+                ),
+                "existing evidence source path",
+            ),
+        }
+        for name, (mutate, message) in cases.items():
+            with self.subTest(name=name):
+                artifact = planning_artifact(validator, baseline)
+                mutate(artifact)
+                with_content_hash(validator, artifact)
+                with self.assertRaisesRegex(validator.ArtifactValidationError, message):
+                    validator.validate_artifact_document(artifact, baseline, ROOT, stage="approval")
+
+        draft = planning_artifact(validator, baseline)
+        draft["status"] = "draft"
+        draft["repository_map"]["entry_points"] = []
+        draft["repository_map"]["change_surface"] = []
+        draft["repository_map"]["dependencies"] = []
+        draft["repository_map"]["verification"] = []
+        draft["acceptance_mapping"] = []
+        draft["verification_mapping"] = []
+        with_content_hash(validator, draft)
+        result = validator.validate_artifact_document(draft, baseline, ROOT, stage="advisory")
+        self.assertEqual(result["status"], "draft")
 
 
 if __name__ == "__main__":

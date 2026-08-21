@@ -23,6 +23,12 @@ CONTRACTS = {
 ADVISORY_STAGE = "advisory"
 FINAL_STAGES = frozenset({"final", "review", "approval"})
 VALIDATION_STAGES = (ADVISORY_STAGE, "final", "review", "approval")
+PLANNING_EVIDENCE_LISTS = (
+    "entry_points",
+    "change_surface",
+    "dependencies",
+    "verification",
+)
 
 # Final blueprints must describe a construction-ready change, not merely satisfy
 # the shape of the JSON contract.  These paths are intentionally expressed in
@@ -184,6 +190,7 @@ def _validate_contract(artifact: dict[str, Any]) -> tuple[str, dict[str, Any]]:
     if not isinstance(contract, dict):
         raise ArtifactValidationError(f"contract {contract_path} must be a JSON object")
     _validate_schema(artifact, contract, "artifact", contract)
+    _validate_traceability(artifact, require_non_empty=False)
     return schema_version, contract
 
 
@@ -214,8 +221,11 @@ def _validate_stage(artifact: dict[str, Any], stage: str) -> None:
             f"unresolved decision IDs: {', '.join(unresolved)}"
         )
 
-    if artifact["schema_version"] == "technical-blueprint.v1":
+    if artifact["schema_version"] == "planning-result.v1":
+        _validate_final_planning_result(artifact)
+    else:
         _validate_final_blueprint(artifact)
+    _validate_traceability(artifact, require_non_empty=True)
 
 
 def _non_empty_strings(value: Any) -> bool:
@@ -238,6 +248,170 @@ def _require_meaningful_list(artifact: dict[str, Any], dotted_path: str) -> None
         raise ArtifactValidationError(
             f"final technical blueprint requires meaningful {dotted_path} content"
         )
+
+
+def _mapping_ids(mappings: Any, dotted_path: str) -> dict[str, int]:
+    if not isinstance(mappings, list):
+        raise ArtifactValidationError(f"{dotted_path} must be a list")
+    ids: dict[str, int] = {}
+    for index, mapping in enumerate(mappings):
+        mapping_id = mapping.get("id") if isinstance(mapping, dict) else None
+        if not isinstance(mapping_id, str) or not mapping_id.strip():
+            raise ArtifactValidationError(
+                f"{dotted_path}[{index}].id must be a meaningful identifier"
+            )
+        if mapping_id in ids:
+            raise ArtifactValidationError(
+                f"{dotted_path} contains duplicate mapping ID {mapping_id!r}"
+            )
+        ids[mapping_id] = index
+    return ids
+
+
+def _repository_path_exists(reference: str) -> bool:
+    """Resolve a repository-relative evidence path without escaping the root."""
+    if not isinstance(reference, str) or not reference.strip():
+        return False
+    reference = reference.strip()
+    candidate = (ROOT / reference).resolve()
+    try:
+        candidate.relative_to(ROOT)
+    except ValueError:
+        return False
+    return candidate.exists()
+
+
+def _declared_string_exists(value: Any, reference: str) -> bool:
+    """Check compact string-list identifiers without matching arbitrary prose."""
+    def contains(value: Any) -> bool:
+        if isinstance(value, list):
+            return reference in value or any(contains(item) for item in value)
+        if isinstance(value, dict):
+            return any(contains(item) for item in value.values())
+        return False
+    return contains(value)
+
+
+def _change_reference_exists(artifact: dict[str, Any], reference: str) -> bool:
+    """Resolve an implementation/change section or declared implementation ID."""
+    if not isinstance(reference, str) or not reference.strip():
+        return False
+    reference = reference.strip()
+    root = "repository_map" if artifact.get("schema_version") == "planning-result.v1" else "implementation"
+    if reference == root or reference.startswith(root + "."):
+        return True
+    if artifact.get("schema_version") == "technical-blueprint.v1":
+        if reference in {"scope", "risk_controls"}:
+            return True
+        if reference.startswith(("scope.", "risk_controls.")):
+            return _artifact_path(artifact, reference) is not None
+    return _declared_string_exists(artifact.get("implementation"), reference)
+
+
+def _verification_reference_exists(artifact: dict[str, Any], reference: str) -> bool:
+    """Resolve a verification evidence path or repository-map verification path."""
+    if _repository_path_exists(reference):
+        return True
+    if not isinstance(reference, str) or not reference.strip():
+        return False
+    reference = reference.strip()
+    return artifact.get("schema_version") == "planning-result.v1" and (
+        reference == "repository_map.verification"
+        or reference.startswith("repository_map.verification.")
+    )
+
+def _validate_traceability(artifact: dict[str, Any], require_non_empty: bool) -> None:
+    acceptance = artifact.get("acceptance_mapping")
+    verification = artifact.get("verification_mapping")
+    acceptance_ids = _mapping_ids(acceptance, "artifact.acceptance_mapping")
+    verification_ids = _mapping_ids(verification, "artifact.verification_mapping")
+
+    if require_non_empty and not acceptance_ids:
+        raise ArtifactValidationError(
+            "final artifact requires non-empty acceptance criteria mapping"
+        )
+    if require_non_empty and not verification_ids:
+        raise ArtifactValidationError(
+            "final artifact requires non-empty verification mapping"
+        )
+    if not require_non_empty and (not acceptance_ids or not verification_ids):
+        return
+
+    all_ids = set(acceptance_ids) | set(verification_ids)
+    if len(all_ids) != len(acceptance_ids) + len(verification_ids):
+        raise ArtifactValidationError(
+            "acceptance_mapping and verification_mapping IDs must be unique across the artifact"
+        )
+
+    implementation_root = (
+        "repository_map"
+        if artifact.get("schema_version") == "planning-result.v1"
+        else "implementation"
+    )
+    covered_implementation = False
+    for index, mapping in enumerate(acceptance or []):
+        source = mapping["source"].strip()
+        if not source:
+            raise ArtifactValidationError(
+                f"artifact.acceptance_mapping[{index}].source must be meaningful"
+            )
+        targets = mapping["targets"]
+        for target in targets:
+            if not _change_reference_exists(artifact, target):
+                raise ArtifactValidationError(
+                    f"artifact.acceptance_mapping[{index}].targets references unknown "
+                    f"implementation/change ID or path {target!r}"
+                )
+            if target == implementation_root or target.startswith(implementation_root + "."):
+                covered_implementation = True
+
+    verified_acceptance = set()
+    for index, mapping in enumerate(verification or []):
+        source = mapping["source"].strip()
+        if source not in acceptance_ids:
+            raise ArtifactValidationError(
+                f"artifact.verification_mapping[{index}].source references unknown "
+                f"acceptance/requirement ID {source!r}"
+            )
+        verified_acceptance.add(source)
+        for target in mapping["targets"]:
+            if not _verification_reference_exists(artifact, target):
+                raise ArtifactValidationError(
+                    f"artifact.verification_mapping[{index}].targets references unknown "
+                    f"verification ID or evidence path {target!r}"
+                )
+
+    orphaned = sorted(set(acceptance_ids) - verified_acceptance)
+    if orphaned:
+        raise ArtifactValidationError(
+            "orphaned acceptance/requirement IDs lack verification mappings: "
+            + ", ".join(orphaned)
+        )
+    if require_non_empty and not covered_implementation:
+        raise ArtifactValidationError(
+            f"acceptance mappings must cover the declared {implementation_root} change surface"
+        )
+
+
+def _validate_final_planning_result(artifact: dict[str, Any]) -> None:
+    repository_map = artifact["repository_map"]
+    for key in PLANNING_EVIDENCE_LISTS:
+        evidence = repository_map[key]
+        if not isinstance(evidence, list) or not evidence:
+            raise ArtifactValidationError(
+                f"final planning result requires meaningful repository_map.{key} evidence"
+            )
+        for index, item in enumerate(evidence):
+            if not item["claim"].strip() or not item["sources"]:
+                raise ArtifactValidationError(
+                    f"final planning result requires meaningful repository_map.{key}[{index}] evidence"
+                )
+            for source in item["sources"]:
+                if not source.strip() or not _repository_path_exists(source):
+                    raise ArtifactValidationError(
+                        f"final planning result requires an existing evidence source path; "
+                        f"got {source!r} in repository_map.{key}[{index}]"
+                    )
 
 
 def _validate_final_blueprint(artifact: dict[str, Any]) -> None:
