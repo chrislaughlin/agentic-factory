@@ -69,8 +69,8 @@ class StaticContractTests(unittest.TestCase):
 
     def test_versioned_contracts_and_deterministic_eval(self):
         for name, fields in {
-            "planning-result-v1.json": {"artifact_id", "baseline_sha", "content_hash", "unresolved_decisions", "acceptance_mapping", "verification_mapping"},
-            "technical-blueprint-v1.json": {"artifact_id", "baseline_sha", "content_hash", "unresolved_decisions", "acceptance_mapping", "verification_mapping"},
+            "planning-result-v1.json": {"schema_version", "kind", "role", "artifact_id", "baseline_sha", "content_hash", "status", "unresolved_decisions", "acceptance_mapping", "verification_mapping"},
+            "technical-blueprint-v1.json": {"schema_version", "kind", "role", "artifact_id", "baseline_sha", "content_hash", "status", "unresolved_decisions", "acceptance_mapping", "verification_mapping"},
         }.items():
             contract = json.loads((ROOT / "contracts" / name).read_text())
             self.assertTrue(fields.issubset(set(contract["required"])))

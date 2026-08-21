@@ -36,6 +36,57 @@ def with_content_hash(validator, artifact):
     return artifact
 
 
+def planning_artifact(validator, baseline):
+    return with_content_hash(validator, {
+        "schema_version": "planning-result.v1",
+        "kind": "planning-result",
+        "role": "map-codebase",
+        "artifact_id": "map-001",
+        "baseline_sha": baseline,
+        "content_hash": "",
+        "status": "complete",
+        "summary": "A valid planning artifact.",
+        "repository_map": {
+            "entry_points": [],
+            "change_surface": [],
+            "dependencies": [],
+            "verification": [],
+        },
+        "unresolved_decisions": [],
+        "acceptance_mapping": [],
+        "verification_mapping": [],
+    })
+
+
+def blueprint_artifact(validator, baseline):
+    return with_content_hash(validator, {
+        "schema_version": "technical-blueprint.v1",
+        "kind": "technical-blueprint",
+        "role": "design-solution",
+        "artifact_id": "blueprint-001",
+        "baseline_sha": baseline,
+        "content_hash": "",
+        "status": "complete",
+        "change_classification": "security",
+        "scope": {"in_scope": [], "out_of_scope": []},
+        "implementation": {
+            "components": [],
+            "interfaces": [],
+            "data_and_state": [],
+            "failure_handling": [],
+        },
+        "risk_controls": {
+            "security": [],
+            "concurrency": [],
+            "performance": [],
+            "operability": [],
+        },
+        "unresolved_decisions": [],
+        "acceptance_mapping": [],
+        "verification_mapping": [],
+    })
+
+
 class Issue19PlanningTests(unittest.TestCase):
     def test_planning_lifecycle_stops_ambiguity_and_preserves_human_gates(self):
         do_work = (ROOT / ".agents/skills/do-work/SKILL.md").read_text()
@@ -178,19 +229,7 @@ class Issue19PlanningTests(unittest.TestCase):
         baseline = subprocess.run(
             ["git", "rev-parse", "HEAD"], cwd=ROOT, text=True, capture_output=True, check=True
         ).stdout.strip()
-        artifact = {
-            "schema_version": "planning-result.v1",
-            "artifact_id": "map-001",
-            "baseline_sha": baseline,
-            "content_hash": "",
-            "status": "complete",
-            "summary": "A valid planning artifact.",
-            "repository_map": {},
-            "unresolved_decisions": [],
-            "acceptance_mapping": [],
-            "verification_mapping": [],
-        }
-        with_content_hash(validator, artifact)
+        artifact = planning_artifact(validator, baseline)
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "artifact.json"
             path.write_text(json.dumps(artifact), encoding="utf-8")
@@ -213,27 +252,58 @@ class Issue19PlanningTests(unittest.TestCase):
             with self.assertRaisesRegex(validator.ArtifactValidationError, "baseline_sha"):
                 validator.validate_artifact(path, baseline, ROOT)
 
+    def test_planning_artifact_gate_rejects_minimal_and_unknown_contract_artifacts(self):
+        validator = load_artifact_validator()
+        baseline = subprocess.run(
+            ["git", "rev-parse", "HEAD"], cwd=ROOT, text=True, capture_output=True, check=True
+        ).stdout.strip()
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "artifact.json"
+            minimal = with_content_hash(validator, {
+                "baseline_sha": baseline,
+                "content_hash": "",
+            })
+            path.write_text(json.dumps(minimal), encoding="utf-8")
+            with self.assertRaisesRegex(validator.ArtifactValidationError, "schema_version"):
+                validator.validate_artifact(path, baseline, ROOT)
+
+            unknown_kind = planning_artifact(validator, baseline)
+            unknown_kind["kind"] = "untrusted-kind"
+            with_content_hash(validator, unknown_kind)
+            path.write_text(json.dumps(unknown_kind), encoding="utf-8")
+            with self.assertRaisesRegex(validator.ArtifactValidationError, "must equal"):
+                validator.validate_artifact(path, baseline, ROOT)
+
+            malformed_mapping = planning_artifact(validator, baseline)
+            malformed_mapping["acceptance_mapping"] = {"id": "not-a-list"}
+            with_content_hash(validator, malformed_mapping)
+            path.write_text(json.dumps(malformed_mapping), encoding="utf-8")
+            with self.assertRaisesRegex(validator.ArtifactValidationError, "acceptance_mapping"):
+                validator.validate_artifact(path, baseline, ROOT)
+
+    def test_planning_artifact_gate_accepts_valid_result_and_blueprint(self):
+        validator = load_artifact_validator()
+        baseline = subprocess.run(
+            ["git", "rev-parse", "HEAD"], cwd=ROOT, text=True, capture_output=True, check=True
+        ).stdout.strip()
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "artifact.json"
+            for artifact, kind, role in (
+                (planning_artifact(validator, baseline), "planning-result", "map-codebase"),
+                (blueprint_artifact(validator, baseline), "technical-blueprint", "design-solution"),
+            ):
+                path.write_text(json.dumps(artifact), encoding="utf-8")
+                result = validator.validate_artifact(path, baseline, ROOT)
+                self.assertEqual(result["kind"], kind)
+                self.assertEqual(result["role"], role)
+                self.assertEqual(result["status"], "complete")
+
     def test_planning_artifact_gate_rejects_invalid_or_mismatched_revision(self):
         validator = load_artifact_validator()
         baseline = subprocess.run(
             ["git", "rev-parse", "HEAD"], cwd=ROOT, text=True, capture_output=True, check=True
         ).stdout.strip()
-        artifact = {
-            "schema_version": "technical-blueprint.v1",
-            "artifact_id": "blueprint-001",
-            "baseline_sha": baseline,
-            "content_hash": "",
-            "status": "complete",
-            "summary": "A valid blueprint.",
-            "scope": {},
-            "interfaces": {},
-            "implementation": {},
-            "risk_controls": {},
-            "unresolved_decisions": [],
-            "acceptance_mapping": [],
-            "verification_mapping": [],
-        }
-        with_content_hash(validator, artifact)
+        artifact = blueprint_artifact(validator, baseline)
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "artifact.json"
             path.write_text(json.dumps(artifact), encoding="utf-8")

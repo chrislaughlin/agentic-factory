@@ -16,6 +16,10 @@ from typing import Any
 ROOT = Path(__file__).resolve().parents[1]
 SHA_RE = re.compile(r"^[0-9a-f]{40,64}$")
 CONTENT_HASH_RE = re.compile(r"^sha256:[0-9a-f]{64}$")
+CONTRACTS = {
+    "planning-result.v1": ROOT / "contracts" / "planning-result-v1.json",
+    "technical-blueprint.v1": ROOT / "contracts" / "technical-blueprint-v1.json",
+}
 
 
 class ArtifactValidationError(ValueError):
@@ -50,6 +54,99 @@ def _load_artifact(path: Path) -> dict[str, Any]:
     return artifact
 
 
+def _resolve_schema_ref(reference: str, schema: dict[str, Any]) -> dict[str, Any]:
+    if not reference.startswith("#/"):
+        raise ArtifactValidationError(f"unsupported contract reference {reference}")
+    resolved: Any = schema
+    for part in reference[2:].split("/"):
+        if not isinstance(resolved, dict) or part not in resolved:
+            raise ArtifactValidationError(f"contract reference does not resolve: {reference}")
+        resolved = resolved[part]
+    if not isinstance(resolved, dict):
+        raise ArtifactValidationError(f"contract reference is not an object schema: {reference}")
+    return resolved
+
+
+def _validate_schema(value: Any, schema: dict[str, Any], path: str, root: dict[str, Any]) -> None:
+    if "$ref" in schema:
+        _validate_schema(value, _resolve_schema_ref(schema["$ref"], root), path, root)
+        return
+
+    if "const" in schema and value != schema["const"]:
+        raise ArtifactValidationError(f"{path} must equal {schema['const']!r}")
+    if "enum" in schema and value not in schema["enum"]:
+        raise ArtifactValidationError(f"{path} has an unsupported value")
+
+    expected_type = schema.get("type")
+    if expected_type == "object":
+        if not isinstance(value, dict):
+            raise ArtifactValidationError(f"{path} must be an object")
+        required = schema.get("required", [])
+        missing = [field for field in required if field not in value]
+        if missing:
+            raise ArtifactValidationError(f"{path} is missing required fields: {', '.join(missing)}")
+        properties = schema.get("properties", {})
+        if schema.get("additionalProperties") is False:
+            unexpected = sorted(set(value) - set(properties))
+            if unexpected:
+                raise ArtifactValidationError(
+                    f"{path} has unexpected fields: {', '.join(unexpected)}"
+                )
+        for field, field_schema in properties.items():
+            if field in value:
+                _validate_schema(value[field], field_schema, f"{path}.{field}", root)
+        return
+
+    if expected_type == "array":
+        if not isinstance(value, list):
+            raise ArtifactValidationError(f"{path} must be an array")
+        min_items = schema.get("minItems")
+        if min_items is not None and len(value) < min_items:
+            raise ArtifactValidationError(f"{path} must contain at least {min_items} item(s)")
+        item_schema = schema.get("items")
+        if item_schema is not None:
+            for index, item in enumerate(value):
+                _validate_schema(item, item_schema, f"{path}[{index}]", root)
+        return
+
+    if expected_type == "string":
+        if not isinstance(value, str):
+            raise ArtifactValidationError(f"{path} must be a string")
+        min_length = schema.get("minLength")
+        if min_length is not None and len(value) < min_length:
+            raise ArtifactValidationError(f"{path} must not be empty")
+        pattern = schema.get("pattern")
+        if pattern is not None and re.fullmatch(pattern, value) is None:
+            raise ArtifactValidationError(f"{path} has an invalid format")
+        return
+
+    if expected_type == "boolean" and not isinstance(value, bool):
+        raise ArtifactValidationError(f"{path} must be a boolean")
+    if expected_type == "integer" and (not isinstance(value, int) or isinstance(value, bool)):
+        raise ArtifactValidationError(f"{path} must be an integer")
+    if expected_type == "number" and (not isinstance(value, (int, float)) or isinstance(value, bool)):
+        raise ArtifactValidationError(f"{path} must be a number")
+    if expected_type == "null" and value is not None:
+        raise ArtifactValidationError(f"{path} must be null")
+
+
+def _validate_contract(artifact: dict[str, Any]) -> tuple[str, dict[str, Any]]:
+    schema_version = artifact.get("schema_version")
+    if not isinstance(schema_version, str):
+        raise ArtifactValidationError("artifact.schema_version is required and must be a string")
+    contract_path = CONTRACTS.get(schema_version)
+    if contract_path is None:
+        raise ArtifactValidationError(f"unknown artifact schema_version: {schema_version}")
+    try:
+        contract = json.loads(contract_path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeError, json.JSONDecodeError) as exc:
+        raise ArtifactValidationError(f"cannot read contract {contract_path}: {exc}") from exc
+    if not isinstance(contract, dict):
+        raise ArtifactValidationError(f"contract {contract_path} must be a JSON object")
+    _validate_schema(artifact, contract, "artifact", contract)
+    return schema_version, contract
+
+
 def _resolve_commit(repository: Path, revision: str, label: str) -> str:
     if not SHA_RE.fullmatch(revision):
         raise ArtifactValidationError(f"{label} is not a valid Git revision")
@@ -74,13 +171,14 @@ def validate_artifact(
     expected_revision: str | None,
     repository: Path = ROOT,
 ) -> dict[str, str]:
-    """Validate content_hash and baseline_sha, failing closed without context."""
+    """Validate the artifact contract and its integrity, failing closed."""
     if not expected_revision:
         raise ArtifactValidationError(
             "expected Git revision context is required; refusing to validate artifact"
         )
 
     artifact = _load_artifact(path)
+    schema_version, _ = _validate_contract(artifact)
     content_hash = artifact.get("content_hash")
     if not isinstance(content_hash, str) or not CONTENT_HASH_RE.fullmatch(content_hash):
         raise ArtifactValidationError("content_hash must match sha256:<64 lowercase hex characters>")
@@ -102,7 +200,11 @@ def validate_artifact(
             f"{baseline_resolved} != {expected_resolved}"
         )
     return {
+        "schema_version": schema_version,
         "artifact_id": str(artifact.get("artifact_id", "")),
+        "kind": str(artifact["kind"]),
+        "role": str(artifact["role"]),
+        "status": str(artifact["status"]),
         "baseline_sha": baseline_resolved,
         "content_hash": computed_hash,
     }

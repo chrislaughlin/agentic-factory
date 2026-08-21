@@ -187,7 +187,7 @@ def validate() -> list[str]:
             if contract.get("type") != "object" or not contract.get("required"):
                 errors.append(f"{path.relative_to(ROOT)}: contract must define required object fields")
             required = set(contract.get("required", []))
-            for field in {"artifact_id", "baseline_sha", "content_hash", "unresolved_decisions", "acceptance_mapping", "verification_mapping"}:
+            for field in {"schema_version", "kind", "role", "artifact_id", "baseline_sha", "content_hash", "status", "unresolved_decisions", "acceptance_mapping", "verification_mapping"}:
                 if field not in required:
                     errors.append(f"{path.relative_to(ROOT)}: missing required planning field {field}")
         except (OSError, json.JSONDecodeError) as exc:

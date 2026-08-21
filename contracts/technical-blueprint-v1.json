@@ -6,9 +6,12 @@
   "additionalProperties": false,
   "required": [
     "schema_version",
+    "kind",
+    "role",
     "artifact_id",
     "baseline_sha",
     "content_hash",
+    "status",
     "change_classification",
     "scope",
     "implementation",
@@ -19,9 +22,12 @@
   ],
   "properties": {
     "schema_version": { "const": "technical-blueprint.v1" },
+    "kind": { "const": "technical-blueprint" },
+    "role": { "const": "design-solution" },
     "artifact_id": { "$ref": "#/$defs/artifact_id" },
     "baseline_sha": { "$ref": "#/$defs/sha" },
     "content_hash": { "$ref": "#/$defs/hash" },
+    "status": { "enum": ["draft", "decision-needed", "complete"] },
     "change_classification": { "enum": ["local", "multi-layer", "api", "shared-type", "schema", "migration", "auth", "rollout", "security", "concurrency", "performance", "operability", "broad-impact-bug", "unknown"] },
     "scope": {
       "type": "object",
