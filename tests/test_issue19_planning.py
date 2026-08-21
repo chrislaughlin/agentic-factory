@@ -226,6 +226,33 @@ class Issue19PlanningTests(unittest.TestCase):
                 self.assertIn("tests and fixtures", canonical)
                 self.assertIn("edit: allow", opencode)
 
+    def test_verify_and_watch_responsibilities_remain_read_only_and_delegated(self):
+        expected = {
+            "verify-qa": "Validate every acceptance criterion against the tested revision with runtime evidence.",
+            "watch-change": "Monitor CI and review feedback on the published PR or MR.",
+        }
+        for role, purpose in expected.items():
+            with self.subTest(role=role):
+                canonical = (ROOT / "agents" / f"{role}.md").read_text()
+                codex = (ROOT / "adapters/codex" / f"{role}.toml").read_text()
+                claude = (ROOT / "adapters/claude" / f"{role}.md").read_text()
+                opencode = (ROOT / "adapters/opencode" / f"{role}.md").read_text()
+
+                self.assertIn(purpose, canonical)
+                self.assertIn(purpose, codex)
+                self.assertIn(purpose, claude)
+                self.assertIn(purpose, opencode)
+                self.assertIn(f'"{role}": allow', opencode)
+                self.assertIn("Do not spawn agents", canonical)
+                self.assertIn("take ownership of the wider lifecycle", canonical.lower())
+
+                self.assertIn('sandbox_mode = "read-only"', codex)
+                self.assertIn("tools: [Read, Grep, Glob, Skill]", claude)
+                self.assertIn("permissionMode: plan", claude)
+                self.assertIn("disallowedTools: [Edit, Write, NotebookEdit]", claude)
+                self.assertIn("edit: deny", opencode)
+                self.assertRegex(opencode, r"(?m)^\s*bash\s*:\s*deny\s*$")
+
     def test_planning_artifact_gate_rejects_tampering_and_missing_revision_context(self):
         validator = load_artifact_validator()
         baseline = subprocess.run(
