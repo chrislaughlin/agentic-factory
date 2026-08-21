@@ -53,6 +53,9 @@ def validate() -> list[str]:
         "research-product",
         "challenge-product",
         "review-work-items",
+        "map-codebase",
+        "design-solution",
+        "review-technical-plan",
     }
     if set(skill_names) != expected_skills:
         errors.append(f"skill set mismatch: {skill_names}")
@@ -145,6 +148,25 @@ def validate() -> list[str]:
         errors.append("installer is missing")
     if not (ROOT / "README.md").is_file():
         errors.append("README is missing")
+    contracts = {
+        "planning-result.v1": ROOT / "contracts" / "planning-result-v1.json",
+        "technical-blueprint.v1": ROOT / "contracts" / "technical-blueprint-v1.json",
+    }
+    for version, path in contracts.items():
+        try:
+            contract = json.loads(path.read_text(encoding="utf-8"))
+            if contract.get("$id") != f"agent-factory/{version.replace('.', '/')}":
+                errors.append(f"{path.relative_to(ROOT)}: invalid contract id")
+            if contract.get("type") != "object" or not contract.get("required"):
+                errors.append(f"{path.relative_to(ROOT)}: contract must define required object fields")
+            required = set(contract.get("required", []))
+            for field in {"artifact_id", "baseline_sha", "content_hash", "unresolved_decisions", "acceptance_mapping", "verification_mapping"}:
+                if field not in required:
+                    errors.append(f"{path.relative_to(ROOT)}: missing required planning field {field}")
+        except (OSError, json.JSONDecodeError) as exc:
+            errors.append(f"{path.relative_to(ROOT)}: unreadable contract: {exc}")
+    if not (ROOT / "scripts" / "evaluate_planning.py").is_file():
+        errors.append("planning evaluator is missing")
     return errors
 
 

@@ -40,7 +40,7 @@ flowchart LR
 
 ```mermaid
 flowchart LR
-  H["Human selects one ready work reference"] --> D["do-work: inspect, grill, plan"]
+  H["Human selects one ready work reference"] --> D["do-work: interrogate, map, design"]
   D -->|"explicit approval"| C["construct-work"]
   C --> S["review-security at pinned SHA"]
   C --> T["author-tests"]
@@ -57,6 +57,8 @@ flowchart LR
 
 `do-work` always remains the orchestrator. Specialists cannot spawn agents or inherit the lifecycle. Production code has one writer (`construct-work`); security, QA, code-quality review, and remote monitoring are read-only; `author-tests` may change only tests and fixtures.
 
+Planning is an explicit sequence: initial questions → repository discovery → read-only codebase mapping → follow-up questions → solution design → follow-up questions → conditional technical-plan review → reconciliation → exact final reconciled blueprint review → explicit human approval → construction. `review-technical-plan` is required for multi-layer, API/shared-type/schema/migration/auth/rollout, material security/concurrency/performance/operability, broad-impact bug fixes, unresolved material decisions, and unknown classifications. A material blueprint change or content-hash mismatch requires review of the exact new artifact.
+
 After plan approval, each work item receives a dedicated task branch and sibling Git worktree created from the recorded baseline. Ignored local `.env` files are copied from the journaled invoking checkout into matching relative paths without exposing their contents; unsafe symlinks, collisions, modified tracked files, and non-ignored environment files block delegation. Construction, tests, runtime QA, review, publication, and remediation use that worktree; the checkout where the human invoked `do-work` remains untouched. The journal lives in the Git common directory and records both absolute checkout paths for safe resumption. Agent Factory retains the worktree at handoff so the human can inspect it and remove it after review or merge.
 
 ## Included skills
@@ -67,6 +69,9 @@ After plan approval, each work item receives a dedicated task branch and sibling
 | `research-product` | Independent user, market, domain, and repository evidence research |
 | `challenge-product` | Independent assumptions, risks, options, and experiment challenge |
 | `review-work-items` | Independent work-item readiness and slicing review |
+| `map-codebase` | Read-only repository mapping for implementation planning |
+| `design-solution` | Read-only versioned technical blueprint design |
+| `review-technical-plan` | Conditional read-only review of the exact final blueprint |
 | `do-work` | User-invoked lifecycle orchestrator |
 | `construct-work` | Approved production implementation and remediation |
 | `author-tests` | Test/fixture authoring and deterministic checks |
@@ -105,6 +110,14 @@ The adapter formats follow the current [Codex](https://learn.chatgpt.com/docs/ag
 No repository setup step or Agent Factory configuration file is required. At the start of each work item, `do-work` inspects the live repository and forge to discover its instructions, architecture, branch conventions, environment prerequisites, verification commands, runtime QA paths, publication rules, and required checks.
 
 The discovered context and its sources are recorded in the local work journal under Git's shared private metadata at `<git-common-directory>/agent-factory/work/<task-key>.md`. Relevant context is passed to specialists with the approved plan, avoiding a duplicate committed description of the repository. On resume, `do-work` refreshes facts whose sources changed.
+
+Planning artifacts use the versioned contracts in [`contracts`](contracts): `planning-result.v1` for evidence and mapping, and `technical-blueprint.v1` for the exact construction proposal. They include artifact identity, baseline SHA, canonical content hash, unresolved decisions, and acceptance/verification mappings. Live artifacts remain private. The portable evaluator reads only committed sanitized fixtures and recorded results:
+
+```sh
+python3 scripts/evaluate_planning.py
+```
+
+It passes only with 100% required assertion recall and zero forbidden matches; missing or malformed input is blocked.
 
 ## Operating rules
 

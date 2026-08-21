@@ -1,0 +1,4 @@
+interface:
+  display_name: "Design Solution"
+  short_description: "Create a versioned technical blueprint."
+  default_prompt: "Use $design-solution to design the approved solution from the repository map and recorded decisions."

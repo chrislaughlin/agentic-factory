@@ -4,6 +4,8 @@ __pycache__/
 .DS_Store
 
 .agent-factory/work/
+.agent-factory/planning/
+.agent-factory/artifacts/
 
 # Harness-native project installations are generated from canonical sources.
 .claude/agents/

@@ -1,0 +1,20 @@
+{
+  "schema_version": "planning-eval.v1",
+  "fixture_id": "sanitized-planning-loop",
+  "recorded_result": {
+    "source": "sanitized-recorded-result",
+    "text": "planning-result.v1 artifact_id=map-001 baseline_sha=7cd3cfea203cac7cae357bcf26c2348502f0733a content_hash=sha256:abc acceptance_mapping verification_mapping unresolved_decisions\ntechnical-blueprint.v1 exact final reconciled blueprint explicit approval construct-work sole production-code writer"
+  },
+  "required_assertions": [
+    { "id": "planning-contract", "match": "planning-result.v1" },
+    { "id": "blueprint-contract", "match": "technical-blueprint.v1" },
+    { "id": "artifact-integrity", "match": "content_hash=sha256:" },
+    { "id": "traceability", "match": "acceptance_mapping verification_mapping" },
+    { "id": "approval-gate", "match": "explicit approval" },
+    { "id": "writer-boundary", "match": "construct-work sole production-code writer" }
+  ],
+  "forbidden_matches": [
+    { "id": "no-live-model", "match": "live model runner" },
+    { "id": "no-automatic-construction", "match": "automatic construction" }
+  ]
+}

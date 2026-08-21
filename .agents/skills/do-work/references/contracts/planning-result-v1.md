@@ -1,0 +1,7 @@
+# Planning result v1
+
+`contracts/planning-result-v1.json` is the versioned machine-readable contract for repository mapping and planning evidence. A result records `artifact_id`, the immutable `baseline_sha`, a canonical `content_hash` (`sha256:<hex>`), unresolved decisions, and explicit acceptance and verification mappings.
+
+The content hash is computed from canonical JSON with sorted object keys, UTF-8 encoding, and the `content_hash` property omitted. The hash covers the exact artifact, including mappings and unresolved decisions. Any material edit requires a new hash and a fresh final-artifact review.
+
+The contract is a planning artifact only. It cannot authorize construction; the parent `do-work` skill owns the approval gate.

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import subprocess
 import unittest
 from pathlib import Path
 
@@ -28,6 +29,49 @@ class StaticContractTests(unittest.TestCase):
         self.assertIn("run `review-security` against that immutable commit and `author-tests`", do_work)
         self.assertIn("Permit three full remediation cycles", do_work)
         self.assertIn("Never merge or deploy", workflow)
+
+    def test_planning_loop_has_ordered_gates_and_conditional_review(self):
+        do_work = (ROOT / ".agents/skills/do-work/SKILL.md").read_text()
+        planning = (ROOT / ".agents/skills/do-work/references/planning.md").read_text()
+        required = [
+            "1. **Initial questions**", "2. **Repository discovery**", "3. **Mapping**", "4. **Follow-up**",
+            "5. **Design**", "6. **Follow-up**", "7. **Conditional review**", "8. **Reconciliation**",
+            "9. **Exact final artifact review**", "10. **Explicit approval**", "11. **Construction**",
+        ]
+        positions = [planning.index(term) for term in required]
+        self.assertEqual(positions, sorted(positions))
+        for trigger in ["multi-layer", "API", "shared-type", "schema", "migration", "auth", "rollout", "security", "concurrency", "performance", "operability", "broad-impact", "unknown"]:
+            self.assertIn(trigger, do_work + planning)
+        self.assertIn("exact final reconciled blueprint", do_work)
+
+    def test_versioned_contracts_and_deterministic_eval(self):
+        for name, fields in {
+            "planning-result-v1.json": {"artifact_id", "baseline_sha", "content_hash", "unresolved_decisions", "acceptance_mapping", "verification_mapping"},
+            "technical-blueprint-v1.json": {"artifact_id", "baseline_sha", "content_hash", "unresolved_decisions", "acceptance_mapping", "verification_mapping"},
+        }.items():
+            contract = json.loads((ROOT / "contracts" / name).read_text())
+            self.assertTrue(fields.issubset(set(contract["required"])))
+        result = subprocess.run(
+            ["python3", str(ROOT / "scripts/evaluate_planning.py")],
+            cwd=ROOT,
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn('"required_recall_percent":100.0', result.stdout)
+        self.assertIn('"forbidden_matches":0', result.stdout)
+
+    def test_malformed_or_missing_eval_input_is_blocked(self):
+        missing = subprocess.run(
+            ["python3", str(ROOT / "scripts/evaluate_planning.py"), "--fixtures", str(ROOT / "does-not-exist")],
+            cwd=ROOT,
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+        self.assertEqual(missing.returncode, 2)
+        self.assertIn('"status":"blocked"', missing.stdout)
 
     def test_orchestrator_discovers_repository_context_without_setup_step(self):
         do_work = (ROOT / ".agents/skills/do-work/SKILL.md").read_text()

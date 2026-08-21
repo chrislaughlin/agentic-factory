@@ -1,0 +1,4 @@
+interface:
+  display_name: "Review Technical Plan"
+  short_description: "Review technical blueprints before construction."
+  default_prompt: "Use $review-technical-plan to independently review the exact reconciled technical blueprint."
