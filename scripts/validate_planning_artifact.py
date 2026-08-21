@@ -183,7 +183,9 @@ def _validate_schema(value: Any, schema: dict[str, Any], path: str, root: dict[s
         raise ArtifactValidationError(f"{path} must be null")
 
 
-def _validate_contract(artifact: dict[str, Any]) -> tuple[str, dict[str, Any]]:
+def _validate_contract(
+    artifact: dict[str, Any], repository: Path
+) -> tuple[str, dict[str, Any]]:
     schema_version = artifact.get("schema_version")
     if not isinstance(schema_version, str):
         raise ArtifactValidationError("artifact.schema_version is required and must be a string")
@@ -197,11 +199,11 @@ def _validate_contract(artifact: dict[str, Any]) -> tuple[str, dict[str, Any]]:
     if not isinstance(contract, dict):
         raise ArtifactValidationError(f"contract {contract_path} must be a JSON object")
     _validate_schema(artifact, contract, "artifact", contract)
-    _validate_traceability(artifact, require_non_empty=False)
+    _validate_traceability(artifact, repository, require_non_empty=False)
     return schema_version, contract
 
 
-def _validate_stage(artifact: dict[str, Any], stage: str) -> None:
+def _validate_stage(artifact: dict[str, Any], repository: Path, stage: str) -> None:
     if stage not in VALIDATION_STAGES:
         raise ArtifactValidationError(
             f"unsupported validation stage {stage!r}; expected one of {', '.join(VALIDATION_STAGES)}"
@@ -228,11 +230,23 @@ def _validate_stage(artifact: dict[str, Any], stage: str) -> None:
             f"unresolved decision IDs: {', '.join(unresolved)}"
         )
 
+    missing_answers = [
+        decision["id"]
+        for decision in artifact["unresolved_decisions"]
+        if decision["status"] == "resolved"
+        and (not isinstance(decision.get("answer"), str) or not decision["answer"].strip())
+    ]
+    if missing_answers:
+        raise ArtifactValidationError(
+            "final validation requires a meaningful answer for every resolved decision; "
+            f"missing answer decision IDs: {', '.join(missing_answers)}"
+        )
+
     if artifact["schema_version"] == "planning-result.v1":
-        _validate_final_planning_result(artifact)
+        _validate_final_planning_result(artifact, repository)
     else:
         _validate_final_blueprint(artifact)
-    _validate_traceability(artifact, require_non_empty=True)
+    _validate_traceability(artifact, repository, require_non_empty=True)
 
 
 def _non_empty_strings(value: Any) -> bool:
@@ -275,14 +289,15 @@ def _mapping_ids(mappings: Any, dotted_path: str) -> dict[str, int]:
     return ids
 
 
-def _repository_path_exists(reference: str) -> bool:
+def _repository_path_exists(repository: Path, reference: str) -> bool:
     """Resolve a repository-relative evidence path without escaping the root."""
     if not isinstance(reference, str) or not reference.strip():
         return False
     reference = reference.strip()
-    candidate = (ROOT / reference).resolve()
+    repository = repository.resolve()
+    candidate = (repository / reference).resolve()
     try:
-        candidate.relative_to(ROOT)
+        candidate.relative_to(repository)
     except ValueError:
         return False
     return candidate.exists()
@@ -320,9 +335,11 @@ def _change_reference_exists(artifact: dict[str, Any], reference: str) -> bool:
     return _declared_string_exists(artifact.get("implementation"), reference)
 
 
-def _verification_reference_exists(artifact: dict[str, Any], reference: str) -> bool:
+def _verification_reference_exists(
+    artifact: dict[str, Any], repository: Path, reference: str
+) -> bool:
     """Resolve a verification evidence path or repository-map verification path."""
-    if _repository_path_exists(reference):
+    if _repository_path_exists(repository, reference):
         return True
     if not isinstance(reference, str) or not reference.strip():
         return False
@@ -333,7 +350,9 @@ def _verification_reference_exists(artifact: dict[str, Any], reference: str) -> 
         and _artifact_path(artifact, reference) is not None
     )
 
-def _validate_traceability(artifact: dict[str, Any], require_non_empty: bool) -> None:
+def _validate_traceability(
+    artifact: dict[str, Any], repository: Path, require_non_empty: bool
+) -> None:
     acceptance = artifact.get("acceptance_mapping")
     verification = artifact.get("verification_mapping")
     acceptance_ids = _mapping_ids(acceptance, "artifact.acceptance_mapping")
@@ -391,7 +410,7 @@ def _validate_traceability(artifact: dict[str, Any], require_non_empty: bool) ->
             )
         verified_acceptance.add(source)
         for target in mapping["targets"]:
-            if not _verification_reference_exists(artifact, target):
+            if not _verification_reference_exists(artifact, repository, target):
                 raise ArtifactValidationError(
                     f"artifact.verification_mapping[{index}].targets references unknown "
                     f"verification ID or evidence path {target!r}"
@@ -409,7 +428,7 @@ def _validate_traceability(artifact: dict[str, Any], require_non_empty: bool) ->
         )
 
 
-def _validate_final_planning_result(artifact: dict[str, Any]) -> None:
+def _validate_final_planning_result(artifact: dict[str, Any], repository: Path) -> None:
     repository_map = artifact["repository_map"]
     for key in PLANNING_EVIDENCE_LISTS:
         evidence = repository_map[key]
@@ -423,7 +442,7 @@ def _validate_final_planning_result(artifact: dict[str, Any]) -> None:
                     f"final planning result requires meaningful repository_map.{key}[{index}] evidence"
                 )
             for source in item["sources"]:
-                if not source.strip() or not _repository_path_exists(source):
+                if not source.strip() or not _repository_path_exists(repository, source):
                     raise ArtifactValidationError(
                         f"final planning result requires an existing evidence source path; "
                         f"got {source!r} in repository_map.{key}[{index}]"
@@ -491,8 +510,9 @@ def validate_artifact_document(
 
     if not isinstance(artifact, dict):
         raise ArtifactValidationError("artifact must be a JSON object")
-    schema_version, _ = _validate_contract(artifact)
-    _validate_stage(artifact, stage)
+    repository = repository.resolve()
+    schema_version, _ = _validate_contract(artifact, repository)
+    _validate_stage(artifact, repository, stage)
     content_hash = artifact.get("content_hash")
     if not isinstance(content_hash, str) or not CONTENT_HASH_RE.fullmatch(content_hash):
         raise ArtifactValidationError("content_hash must match sha256:<64 lowercase hex characters>")
@@ -505,7 +525,6 @@ def validate_artifact_document(
     baseline_sha = artifact.get("baseline_sha")
     if not isinstance(baseline_sha, str) or not SHA_RE.fullmatch(baseline_sha):
         raise ArtifactValidationError("baseline_sha must be a 40-64 character lowercase Git SHA")
-    repository = repository.resolve()
     expected_resolved = _resolve_commit(repository, expected_revision, "expected revision")
     baseline_resolved = _resolve_commit(repository, baseline_sha, "baseline_sha")
     if baseline_resolved != expected_resolved:

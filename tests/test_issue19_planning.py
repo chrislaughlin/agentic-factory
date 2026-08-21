@@ -428,6 +428,55 @@ class Issue19PlanningTests(unittest.TestCase):
                 self.assertEqual(result["role"], role)
                 self.assertEqual(result["status"], "complete")
 
+    def test_planning_artifact_gate_uses_separate_repository_for_evidence_and_verification_paths(self):
+        validator = load_artifact_validator()
+        with tempfile.TemporaryDirectory() as directory:
+            repository = Path(directory) / "separate-repository"
+            repository.mkdir()
+            evidence = repository / "separate-only" / "evidence.txt"
+            evidence.parent.mkdir()
+            evidence.write_text("evidence for the separate repository\n", encoding="utf-8")
+            subprocess.run(["git", "init", "--quiet"], cwd=repository, check=True)
+            subprocess.run(
+                ["git", "config", "user.email", "tests@example.invalid"],
+                cwd=repository,
+                check=True,
+            )
+            subprocess.run(
+                ["git", "config", "user.name", "Issue 19 tests"],
+                cwd=repository,
+                check=True,
+            )
+            subprocess.run(
+                ["git", "add", "separate-only/evidence.txt"], cwd=repository, check=True
+            )
+            subprocess.run(
+                ["git", "commit", "--quiet", "-m", "Add separate repository evidence"],
+                cwd=repository,
+                check=True,
+            )
+            baseline = subprocess.run(
+                ["git", "rev-parse", "HEAD"],
+                cwd=repository,
+                text=True,
+                capture_output=True,
+                check=True,
+            ).stdout.strip()
+
+            artifact = planning_artifact(validator, baseline)
+            for evidence_item in artifact["repository_map"].values():
+                if isinstance(evidence_item, list):
+                    for item in evidence_item:
+                        if isinstance(item, dict) and "sources" in item:
+                            item["sources"] = ["separate-only/evidence.txt"]
+            artifact["verification_mapping"][0]["targets"] = ["separate-only/evidence.txt"]
+            with_content_hash(validator, artifact)
+
+            result = validator.validate_artifact_document(
+                artifact, baseline, repository, stage="approval"
+            )
+            self.assertEqual(result["baseline_sha"], baseline)
+
     def test_planning_artifact_gate_rejects_invalid_or_mismatched_revision(self):
         validator = load_artifact_validator()
         baseline = subprocess.run(
@@ -679,6 +728,45 @@ class Issue19PlanningTests(unittest.TestCase):
         with_content_hash(validator, draft)
         result = validator.validate_artifact_document(draft, baseline, ROOT, stage="advisory")
         self.assertEqual(result["status"], "draft")
+
+    def test_final_stages_require_meaningful_answers_for_resolved_decisions(self):
+        validator = load_artifact_validator()
+        baseline = subprocess.run(
+            ["git", "rev-parse", "HEAD"], cwd=ROOT, text=True, capture_output=True, check=True
+        ).stdout.strip()
+        for factory in (planning_artifact, blueprint_artifact):
+            for answer in (None, "", " \t"):
+                with self.subTest(artifact=factory.__name__, answer=repr(answer)):
+                    artifact = factory(validator, baseline)
+                    decision = {
+                        "id": "decision-1",
+                        "question": "Which behavior is required?",
+                        "status": "resolved",
+                    }
+                    if answer is not None:
+                        decision["answer"] = answer
+                    artifact["unresolved_decisions"] = [decision]
+                    with_content_hash(validator, artifact)
+
+                    for stage in ("final", "review", "approval"):
+                        with self.subTest(stage=stage):
+                            with self.assertRaisesRegex(validator.ArtifactValidationError, "answer"):
+                                validator.validate_artifact_document(
+                                    artifact, baseline, ROOT, stage=stage
+                                )
+
+                    if answer == "":
+                        with self.assertRaisesRegex(
+                            validator.ArtifactValidationError, "answer.*empty"
+                        ):
+                            validator.validate_artifact_document(
+                                artifact, baseline, ROOT, stage="advisory"
+                            )
+                    else:
+                        advisory = validator.validate_artifact_document(
+                            artifact, baseline, ROOT, stage="advisory"
+                        )
+                        self.assertEqual(advisory["stage"], "advisory")
 
 
 if __name__ == "__main__":

@@ -4,6 +4,6 @@
 
 The content hash is computed from canonical JSON with sorted object keys, UTF-8 encoding, and the `content_hash` property omitted. The hash covers the exact artifact, including mappings and unresolved decisions. Any material edit requires a new hash and a fresh final-artifact review.
 
-The parent must run `scripts/validate_planning_artifact.py` with the recorded expected baseline revision before review and approval. The gate recomputes the hash and resolves `baseline_sha` locally; missing revision context, a changed artifact, or a revision mismatch fails closed.
+The parent must run `scripts/validate_planning_artifact.py` with the recorded expected baseline revision before review and approval. The gate recomputes the hash and resolves `baseline_sha` locally; missing revision context, a changed artifact, or a revision mismatch fails closed. Final, review, and approval stages also require a meaningful human `answer` on every decision marked `resolved`; advisory validation may accept an unanswered draft decision.
 
 The contract is a planning artifact only. It cannot authorize construction; the parent `do-work` skill owns the approval gate.

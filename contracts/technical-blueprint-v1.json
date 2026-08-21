@@ -81,7 +81,7 @@
         "id": { "type": "string", "minLength": 1 },
         "question": { "type": "string", "minLength": 1 },
         "status": { "enum": ["unresolved", "resolved"] },
-        "answer": { "type": "string" }
+        "answer": { "type": "string", "minLength": 1 }
       }
     },
     "decision_list": { "type": "array", "items": { "$ref": "#/$defs/decision" } },
