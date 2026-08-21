@@ -10,6 +10,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 EVALUATOR = ROOT / "scripts" / "evaluate_planning.py"
+FIXTURE_BASELINE = "7cd3cfea203cac7cae357bcf26c2348502f0733a"
 
 
 def load_evaluator():
@@ -69,22 +70,33 @@ def blueprint_artifact(validator, baseline):
         "content_hash": "",
         "status": "complete",
         "change_classification": "security",
-        "scope": {"in_scope": [], "out_of_scope": []},
+        "scope": {
+            "in_scope": ["Validate technical blueprint content before approval"],
+            "out_of_scope": ["Change verify-qa or watch-change responsibilities"],
+        },
         "implementation": {
-            "components": [],
-            "interfaces": [],
-            "data_and_state": [],
-            "failure_handling": [],
+            "components": ["Planning artifact validator"],
+            "interfaces": ["validate_artifact_document"],
+            "data_and_state": ["No persisted data changes"],
+            "failure_handling": ["Reject malformed or semantically empty final artifacts"],
         },
         "risk_controls": {
-            "security": [],
-            "concurrency": [],
-            "performance": [],
-            "operability": [],
+            "security": ["Keep final validation fail-closed"],
+            "concurrency": ["No shared mutable state"],
+            "performance": ["Use bounded standard-library validation"],
+            "operability": ["Return deterministic gate output"],
         },
         "unresolved_decisions": [],
-        "acceptance_mapping": [],
-        "verification_mapping": [],
+        "acceptance_mapping": [{
+            "id": "acceptance-1",
+            "source": "Final blueprint content is meaningful",
+            "targets": ["scope", "implementation"],
+        }],
+        "verification_mapping": [{
+            "id": "verification-1",
+            "source": "acceptance-1",
+            "targets": ["test_planning_artifact_gate_rejects_semantically_empty_blueprints"],
+        }],
     })
 
 
@@ -132,14 +144,29 @@ class Issue19PlanningTests(unittest.TestCase):
 
     def test_evaluator_reports_required_and_forbidden_failures(self):
         evaluator = load_evaluator()
+        validator = load_artifact_validator()
         with tempfile.TemporaryDirectory() as directory:
             fixture = Path(directory) / "failure.json"
             fixture.write_text(json.dumps({
                 "schema_version": "planning-eval.v1",
                 "fixture_id": "negative-case",
-                "recorded_result": {"source": "sanitized", "text": "present forbidden"},
-                "required_assertions": [{"id": "missing", "match": "absent"}],
-                "forbidden_matches": [{"id": "forbidden", "match": "forbidden"}],
+                "expected_revision": FIXTURE_BASELINE,
+                "recorded_result": {
+                    "source": "sanitized",
+                    "artifacts": [planning_artifact(validator, FIXTURE_BASELINE)],
+                },
+                "required_assertions": [{
+                    "id": "missing",
+                    "artifact_index": 0,
+                    "path": "artifact_id",
+                    "equals": "absent",
+                }],
+                "forbidden_matches": [{
+                    "id": "forbidden",
+                    "artifact_index": 0,
+                    "path": "status",
+                    "equals": "complete",
+                }],
             }))
             code, result = evaluator.run(fixture)
 
@@ -156,23 +183,59 @@ class Issue19PlanningTests(unittest.TestCase):
             cases = {
                 "malformed.json": "{not-json",
                 "missing-capture.json": json.dumps({
-                    "schema_version": "planning-eval.v1",
-                    "fixture_id": "missing-capture",
+                "schema_version": "planning-eval.v1",
+                "fixture_id": "missing-capture",
+                    "expected_revision": FIXTURE_BASELINE,
                     "recorded_result": {"source": "sanitized"},
-                    "required_assertions": [{"id": "r", "match": "r"}],
+                    "required_assertions": [{"id": "r", "artifact_index": 0, "path": "status", "equals": "complete"}],
                     "forbidden_matches": [],
                 }),
                 "empty-capture.json": json.dumps({
                     "schema_version": "planning-eval.v1",
                     "fixture_id": "empty-capture",
-                    "recorded_result": {"source": "sanitized", "text": ""},
-                    "required_assertions": [{"id": "r", "match": "r"}],
+                    "expected_revision": FIXTURE_BASELINE,
+                    "recorded_result": {"source": "sanitized", "artifacts": []},
+                    "required_assertions": [{"id": "r", "artifact_index": 0, "path": "status", "equals": "complete"}],
                     "forbidden_matches": [],
                 }),
             }
             for name, content in cases.items():
                 path = root / name
                 path.write_text(content)
+                with self.subTest(name=name):
+                    code, result = evaluator.run(path)
+                    self.assertEqual(code, evaluator.EXIT_BLOCKED)
+                    self.assertEqual(result["status"], "blocked")
+
+    def test_evaluator_blocks_malformed_hash_and_contract_invalid_artifacts(self):
+        evaluator = load_evaluator()
+        validator = load_artifact_validator()
+        cases = {
+            "malformed-hash": dict(
+                planning_artifact(validator, FIXTURE_BASELINE),
+                content_hash="sha256:not-a-valid-hash",
+            ),
+            "invalid-contract": dict(
+                planning_artifact(validator, FIXTURE_BASELINE),
+                role="design-solution",
+            ),
+        }
+        with tempfile.TemporaryDirectory() as directory:
+            for name, artifact in cases.items():
+                path = Path(directory) / f"{name}.json"
+                path.write_text(json.dumps({
+                    "schema_version": "planning-eval.v1",
+                    "fixture_id": name,
+                    "expected_revision": FIXTURE_BASELINE,
+                    "recorded_result": {"source": "sanitized", "artifacts": [artifact]},
+                    "required_assertions": [{
+                        "id": "status",
+                        "artifact_index": 0,
+                        "path": "status",
+                        "equals": "complete",
+                    }],
+                    "forbidden_matches": [],
+                }))
                 with self.subTest(name=name):
                     code, result = evaluator.run(path)
                     self.assertEqual(code, evaluator.EXIT_BLOCKED)
@@ -192,6 +255,29 @@ class Issue19PlanningTests(unittest.TestCase):
         self.assertEqual(output_one.returncode, 0, output_one.stderr)
         self.assertEqual(output_one.stdout, output_two.stdout)
         self.assertEqual(json.loads(output_one.stdout)["status"], "pass")
+
+    def test_validator_cli_keeps_gate_status_separate_from_artifact_status(self):
+        validator = load_artifact_validator()
+        baseline = subprocess.run(
+            ["git", "rev-parse", "HEAD"], cwd=ROOT, text=True, capture_output=True, check=True
+        ).stdout.strip()
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "artifact.json"
+            path.write_text(json.dumps(blueprint_artifact(validator, baseline)), encoding="utf-8")
+            output = subprocess.run(
+                [
+                    "python3", str(ROOT / "scripts" / "validate_planning_artifact.py"),
+                    "--artifact", str(path), "--expected-revision", baseline,
+                    "--repository", str(ROOT), "--stage", "approval",
+                ],
+                cwd=ROOT, text=True, capture_output=True, check=False,
+            )
+
+        self.assertEqual(output.returncode, 0, output.stderr)
+        result = json.loads(output.stdout)
+        self.assertEqual(result["status"], "pass")
+        self.assertEqual(result["gate_status"], "pass")
+        self.assertEqual(result["artifact_status"], "complete")
 
     def test_role_parity_and_permission_intent_are_preserved_across_harnesses(self):
         manifest = json.loads((ROOT / "agents/manifest.json").read_text())
@@ -388,6 +474,53 @@ class Issue19PlanningTests(unittest.TestCase):
             path.write_text(json.dumps(draft), encoding="utf-8")
             with self.assertRaisesRegex(validator.ArtifactValidationError, "unresolved material decisions"):
                 validator.validate_artifact(path, baseline, ROOT, stage="approval")
+
+    def test_final_blueprint_gate_rejects_semantically_empty_core_content(self):
+        validator = load_artifact_validator()
+        baseline = subprocess.run(
+            ["git", "rev-parse", "HEAD"], cwd=ROOT, text=True, capture_output=True, check=True
+        ).stdout.strip()
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "artifact.json"
+            empty = blueprint_artifact(validator, baseline)
+            empty["scope"]["in_scope"] = []
+            empty["implementation"]["components"] = []
+            empty["acceptance_mapping"] = []
+            empty["verification_mapping"] = []
+            with_content_hash(validator, empty)
+            path.write_text(json.dumps(empty), encoding="utf-8")
+
+            for stage in ("final", "review", "approval"):
+                with self.subTest(stage=stage):
+                    with self.assertRaisesRegex(validator.ArtifactValidationError, "meaningful scope.in_scope"):
+                        validator.validate_artifact(path, baseline, ROOT, stage=stage)
+
+            empty["status"] = "draft"
+            with_content_hash(validator, empty)
+            path.write_text(json.dumps(empty), encoding="utf-8")
+            advisory = validator.validate_artifact(path, baseline, ROOT, stage="advisory")
+            self.assertEqual(advisory["status"], "draft")
+
+    def test_final_blueprint_gate_requires_classification_specific_controls(self):
+        validator = load_artifact_validator()
+        baseline = subprocess.run(
+            ["git", "rev-parse", "HEAD"], cwd=ROOT, text=True, capture_output=True, check=True
+        ).stdout.strip()
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "artifact.json"
+            blueprint = blueprint_artifact(validator, baseline)
+            blueprint["change_classification"] = "performance"
+            blueprint["risk_controls"]["performance"] = []
+            with_content_hash(validator, blueprint)
+            path.write_text(json.dumps(blueprint), encoding="utf-8")
+            with self.assertRaisesRegex(validator.ArtifactValidationError, "risk_controls.performance"):
+                validator.validate_artifact(path, baseline, ROOT, stage="approval")
+
+            blueprint["risk_controls"]["performance"] = ["Keep local evaluation deterministic"]
+            with_content_hash(validator, blueprint)
+            path.write_text(json.dumps(blueprint), encoding="utf-8")
+            result = validator.validate_artifact(path, baseline, ROOT, stage="approval")
+            self.assertEqual(result["status"], "complete")
 
 
 if __name__ == "__main__":

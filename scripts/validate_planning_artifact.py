@@ -24,6 +24,43 @@ ADVISORY_STAGE = "advisory"
 FINAL_STAGES = frozenset({"final", "review", "approval"})
 VALIDATION_STAGES = (ADVISORY_STAGE, "final", "review", "approval")
 
+# Final blueprints must describe a construction-ready change, not merely satisfy
+# the shape of the JSON contract.  These paths are intentionally expressed in
+# terms of the versioned contract so the check remains portable and local.
+BLUEPRINT_CORE_LISTS = (
+    "scope.in_scope",
+    "implementation.components",
+    "implementation.interfaces",
+    "implementation.data_and_state",
+    "implementation.failure_handling",
+)
+CLASSIFICATION_REQUIREMENTS = {
+    "local": (),
+    "multi-layer": ("risk_controls.operability",),
+    "api": ("implementation.interfaces", "implementation.compatibility"),
+    "shared-type": ("implementation.interfaces", "implementation.compatibility"),
+    "schema": ("implementation.data_and_state", "risk_controls.rollback"),
+    "migration": ("implementation.data_and_state", "risk_controls.rollback"),
+    "auth": ("risk_controls.security",),
+    "rollout": ("risk_controls.rollout",),
+    "security": ("risk_controls.security",),
+    "concurrency": ("risk_controls.concurrency",),
+    "performance": ("risk_controls.performance",),
+    "operability": ("risk_controls.operability",),
+    "broad-impact-bug": (
+        "risk_controls.security",
+        "risk_controls.concurrency",
+        "risk_controls.performance",
+        "risk_controls.operability",
+    ),
+    "unknown": (
+        "risk_controls.security",
+        "risk_controls.concurrency",
+        "risk_controls.performance",
+        "risk_controls.operability",
+    ),
+}
+
 
 class ArtifactValidationError(ValueError):
     """The artifact cannot be trusted for exact-artifact review."""
@@ -177,6 +214,47 @@ def _validate_stage(artifact: dict[str, Any], stage: str) -> None:
             f"unresolved decision IDs: {', '.join(unresolved)}"
         )
 
+    if artifact["schema_version"] == "technical-blueprint.v1":
+        _validate_final_blueprint(artifact)
+
+
+def _non_empty_strings(value: Any) -> bool:
+    return isinstance(value, list) and bool(
+        value and all(isinstance(item, str) and item.strip() for item in value)
+    )
+
+
+def _artifact_path(artifact: dict[str, Any], dotted_path: str) -> Any:
+    value: Any = artifact
+    for part in dotted_path.split("."):
+        if not isinstance(value, dict) or part not in value:
+            return None
+        value = value[part]
+    return value
+
+
+def _require_meaningful_list(artifact: dict[str, Any], dotted_path: str) -> None:
+    if not _non_empty_strings(_artifact_path(artifact, dotted_path)):
+        raise ArtifactValidationError(
+            f"final technical blueprint requires meaningful {dotted_path} content"
+        )
+
+
+def _validate_final_blueprint(artifact: dict[str, Any]) -> None:
+    for dotted_path in BLUEPRINT_CORE_LISTS:
+        _require_meaningful_list(artifact, dotted_path)
+
+    for dotted_path in ("acceptance_mapping", "verification_mapping"):
+        mappings = _artifact_path(artifact, dotted_path)
+        if not isinstance(mappings, list) or not mappings:
+            raise ArtifactValidationError(
+                f"final technical blueprint requires {dotted_path} traceability"
+            )
+
+    classification = artifact["change_classification"]
+    for dotted_path in CLASSIFICATION_REQUIREMENTS[classification]:
+        _require_meaningful_list(artifact, dotted_path)
+
 
 def _resolve_commit(repository: Path, revision: str, label: str) -> str:
     if not SHA_RE.fullmatch(revision):
@@ -203,13 +281,26 @@ def validate_artifact(
     repository: Path = ROOT,
     stage: str = "approval",
 ) -> dict[str, str]:
-    """Validate an artifact, failing closed for final review and approval stages."""
+    """Validate an artifact file, failing closed for final review and approval stages."""
+    return validate_artifact_document(
+        _load_artifact(path), expected_revision, repository, stage=stage
+    )
+
+
+def validate_artifact_document(
+    artifact: dict[str, Any],
+    expected_revision: str | None,
+    repository: Path = ROOT,
+    stage: str = "approval",
+) -> dict[str, str]:
+    """Validate an in-memory artifact using the same gate as artifact files."""
     if not expected_revision:
         raise ArtifactValidationError(
             "expected Git revision context is required; refusing to validate artifact"
         )
 
-    artifact = _load_artifact(path)
+    if not isinstance(artifact, dict):
+        raise ArtifactValidationError("artifact must be a JSON object")
     schema_version, _ = _validate_contract(artifact)
     _validate_stage(artifact, stage)
     content_hash = artifact.get("content_hash")
@@ -268,8 +359,25 @@ def main(argv: list[str] | None = None) -> int:
         )
     except ArtifactValidationError as exc:
         print(f"ERROR: {exc}", file=sys.stderr)
+        gate_status = (
+            "blocked"
+            if str(exc) == "expected Git revision context is required; refusing to validate artifact"
+            else "fail"
+        )
+        print(json.dumps({
+            "status": gate_status,
+            "gate_status": gate_status,
+            "artifact_status": None,
+            "error": str(exc),
+        }, sort_keys=True, separators=(",", ":")))
         return 1
-    print(json.dumps({"status": "pass", **result}, sort_keys=True, separators=(",", ":")))
+    output = {
+        "status": "pass",
+        "gate_status": "pass",
+        "artifact_status": result["status"],
+        **{key: value for key, value in result.items() if key != "status"},
+    }
+    print(json.dumps(output, sort_keys=True, separators=(",", ":")))
     return 0
 
 

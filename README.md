@@ -111,7 +111,7 @@ No repository setup step or Agent Factory configuration file is required. At the
 
 The discovered context and its sources are recorded in the local work journal under Git's shared private metadata at `<git-common-directory>/agent-factory/work/<task-key>.md`. Relevant context is passed to specialists with the approved plan, avoiding a duplicate committed description of the repository. On resume, `do-work` refreshes facts whose sources changed.
 
-Planning artifacts use the versioned contracts in [`contracts`](contracts): `planning-result.v1` for evidence and mapping, and `technical-blueprint.v1` for the exact construction proposal. They include artifact identity, baseline SHA, canonical content hash, unresolved decisions, and acceptance/verification mappings. Live artifacts remain private. The portable evaluator reads only committed sanitized fixtures and recorded results:
+Planning artifacts use the versioned contracts in [`contracts`](contracts): `planning-result.v1` for evidence and mapping, and `technical-blueprint.v1` for the exact construction proposal. They include artifact identity, baseline SHA, canonical content hash, unresolved decisions, and acceptance/verification mappings. Live artifacts remain private. The portable evaluator reads only committed sanitized structured artifacts and recorded results:
 
 ```sh
 python3 scripts/evaluate_planning.py
@@ -123,7 +123,7 @@ Before technical-plan review and explicit approval, validate the exact private a
 python3 scripts/validate_planning_artifact.py --stage approval --artifact <artifact.json> --expected-revision <recorded-baseline-sha> --repository <repository-root>
 ```
 
-Final `review` and `approval` validation requires a complete artifact with no unresolved decisions. Use `--stage advisory` only when explicitly validating a non-final draft.
+Final `review` and `approval` validation requires a complete artifact with no unresolved decisions; technical blueprints must also contain meaningful scope, implementation/change-surface, traceability, and classification-specific controls. Use `--stage advisory` only when explicitly validating a non-final draft.
 
 It recomputes the canonical content hash and resolves the baseline locally; missing expected revision context, tampering, and revision mismatches fail closed.
 
