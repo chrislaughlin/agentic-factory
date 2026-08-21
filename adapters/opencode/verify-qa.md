@@ -3,6 +3,7 @@ description: Validate every acceptance criterion against the tested revision wit
 mode: subagent
 permission:
   edit: deny
+  bash: deny
   skill:
     "verify-qa": allow
 ---

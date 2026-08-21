@@ -215,6 +215,7 @@ class Issue19PlanningTests(unittest.TestCase):
                 self.assertIn('sandbox_mode = "read-only"', codex)
                 self.assertIn("disallowedTools: [Edit, Write, NotebookEdit]", claude)
                 self.assertIn("edit: deny", opencode)
+                self.assertRegex(opencode, r"(?m)^\s*bash\s*:\s*deny\s*$")
             elif metadata["permission"] == "workspace-write":
                 self.assertIn('sandbox_mode = "workspace-write"', codex)
                 self.assertIn("edit: allow", opencode)

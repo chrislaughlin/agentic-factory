@@ -42,6 +42,7 @@ class StaticContractTests(unittest.TestCase):
             adapter = (ROOT / "adapters/opencode" / f"{role}.md").read_text()
             with self.subTest(role=role):
                 self.assertIn("edit: deny", adapter)
+                self.assertRegex(adapter, r"(?m)^\s*bash\s*:\s*deny\s*$")
                 self.assertNotRegex(adapter, r"(?m)^\s*bash\s*:\s*(?:allow|ask)\s*$")
 
     def test_orchestrator_contains_required_gates(self):

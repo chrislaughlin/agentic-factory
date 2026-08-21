@@ -162,9 +162,9 @@ def validate() -> list[str]:
                 errors.append(f"Claude {name} is not read-only")
             if "edit: deny" not in opencode:
                 errors.append(f"OpenCode {name} is not read-only")
-            bash_permission = OPENCODE_BASH_RE.search(opencode)
-            if bash_permission and bash_permission.group(1) != "deny":
-                errors.append(f"OpenCode {name} exposes a non-denied bash permission")
+            bash_permissions = OPENCODE_BASH_RE.findall(opencode)
+            if bash_permissions != ["deny"]:
+                errors.append(f"OpenCode {name} must explicitly deny bash")
         elif 'sandbox_mode = "workspace-write"' not in codex or "edit: allow" not in opencode:
             errors.append(f"{name} is missing write capability")
 

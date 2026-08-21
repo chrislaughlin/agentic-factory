@@ -3,6 +3,7 @@ description: Produce a versioned technical blueprint from approved evidence.
 mode: subagent
 permission:
   edit: deny
+  bash: deny
   skill:
     "design-solution": allow
 ---

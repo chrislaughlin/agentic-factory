@@ -3,6 +3,7 @@ description: Review the exact final reconciled technical blueprint.
 mode: subagent
 permission:
   edit: deny
+  bash: deny
   skill:
     "review-technical-plan": allow
 ---
