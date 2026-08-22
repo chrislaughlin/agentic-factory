@@ -66,11 +66,12 @@ flowchart LR
   R -->|"all local gates pass"| P["Ready PR/MR"]
   P --> W["watch-change"]
   W -->|"CI failure, requested changes, or merge conflict"| C
-  W -->|"green and settled"| G["Human review gate"]
+  W -->|"green and settled"| SM["show-me: explain what was built"]
+  SM --> G["Human review gate"]
   G --> M["Human merges and deploys"]
 ```
 
-`do-work` always remains the orchestrator. Specialists cannot spawn agents or inherit the lifecycle. Production code has one writer (`construct-work`); security, QA, code-quality review, and remote monitoring are read-only; `author-tests` may change only tests and fixtures.
+`do-work` always remains the orchestrator. Specialists cannot spawn agents or inherit the lifecycle. Production code has one writer (`construct-work`); security, QA, code-quality review, remote monitoring, and `show-me` are read-only; `author-tests` may change only tests and fixtures. After CI is green and review feedback is settled, `show-me` gives the developer a concise visual explanation of the tested change before human review.
 
 Planning is an explicit sequence: initial questions → repository discovery → read-only codebase mapping → follow-up questions → solution design → follow-up questions → conditional technical-plan review → reconciliation → exact final reconciled blueprint review → explicit human approval → construction. `review-technical-plan` is required for multi-layer, API/shared-type/schema/migration/auth/rollout, material security/concurrency/performance/operability, broad-impact bug fixes, unresolved material decisions, and unknown classifications. A material blueprint change or content-hash mismatch requires review of the exact new artifact.
 
@@ -94,6 +95,7 @@ After plan approval, each work item receives a dedicated task branch and Git wor
 | `verify-qa` | Runtime acceptance verification |
 | `review-code-quality` | Strict structural and specification review |
 | `watch-change` | GitHub/GitLab CI and review monitoring |
+| `show-me` | Concise visual explanation of the completed change |
 
 Canonical skills live in [`.agents/skills`](.agents/skills). Neutral role descriptions live in [`agents`](agents), and thin native definitions live in [`adapters`](adapters). Adapters intentionally do not pin models; they inherit the user's harness defaults.
 

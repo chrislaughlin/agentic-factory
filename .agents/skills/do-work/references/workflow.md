@@ -15,7 +15,8 @@
 3. **Deterministic checks** — run every discovered relevant check and the full test suite from the task worktree. Pre-existing failures are not silently accepted; distinguish and evidence them.
 4. **QA** — give `verify-qa` the approved acceptance criteria, tested head, absolute worktree path, discovered QA context, and prior command evidence. Launch runtime surfaces from the worktree.
 5. **Code quality** — give `review-code-quality` the baseline, tested head, absolute worktree path, plan, repository standards, and earlier evidence.
-6. **Gate** — pass only if all stages return `pass` for the expected revisions. Treat `blocked` as a stop, not a pass.
+6. **Show me** — after CI is green and review feedback is settled, give `show-me` the tested head, approved plan, changed-file summary, acceptance evidence, test results, and review outcomes. Require a concise visual explanation for the developer. This is a read-only explanatory handoff and does not waive any gate.
+7. **Gate** — pass only if all stages return `pass` for the expected revisions. Treat `blocked` as a stop, not a pass.
 
 ## Remediation
 

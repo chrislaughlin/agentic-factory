@@ -1,6 +1,6 @@
 ---
 name: do-work
-description: Orchestrate a software work item from a ticket, PRD, specification, URL, or free-form request through planning, construction, independent verification, pull or merge request publication, CI monitoring, and human handoff. Use when the user explicitly asks to run the complete Agent Factory lifecycle.
+description: Orchestrate a software work item from a ticket, PRD, specification, URL, or free-form request through planning, construction, independent verification, pull or merge request publication, CI monitoring, a visual show-me explanation, and human handoff. Use when the user explicitly asks to run the complete Agent Factory lifecycle.
 ---
 
 # Do Work
@@ -56,6 +56,6 @@ Do not let specialist agents spawn other agents, change the approved scope, waiv
 
 ## Publish and hand off
 
-When every local gate passes, revalidate every journaled environment-file path according to [worktree.md](references/worktree.md), then push and create a ready-for-review PR/MR. Repeat that validation before every later push. Delegate monitoring to `watch-change`. Route legitimate requested changes and CI failures through construction and every local gate before pushing again. Escalate conflicts, scope expansion, unsafe requests, or missing authority.
+When every local gate passes, revalidate every journaled environment-file path according to [worktree.md](references/worktree.md), then push and create a ready-for-review PR/MR. Repeat that validation before every later push. Delegate monitoring to `watch-change`. When CI is green and review feedback is settled, delegate `show-me` with the tested revision, approved plan, changed-file summary, acceptance evidence, test results, and review outcomes. It explains what was built with the smallest useful visual and a brief plain-language summary; it does not change the worktree or waive a gate. Route legitimate requested changes and CI failures through construction and every local gate before pushing again. Escalate conflicts, scope expansion, unsafe requests, or missing authority.
 
 Finish only when CI is green and no requested changes remain. Give the human the PR/MR URL, evidence summary, residual informational notes, manual review instructions, and retained worktree path. Do not remove the worktree automatically; the human may inspect it and remove it after review or merge. The human alone merges and deploys.

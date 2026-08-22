@@ -52,6 +52,8 @@ class StaticContractTests(unittest.TestCase):
         self.assertIn("explicit approval", do_work)
         self.assertIn("run `review-security` against that immutable commit and `author-tests`", do_work)
         self.assertIn("Permit three full remediation cycles", do_work)
+        self.assertIn("`show-me`", do_work)
+        self.assertIn("**Show me**", workflow)
         self.assertIn("Never merge or deploy", workflow)
 
     def test_planning_loop_has_ordered_gates_and_conditional_review(self):

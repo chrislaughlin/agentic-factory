@@ -991,7 +991,7 @@ footer {
   .flow-shell { margin-right: -22px; margin-left: -22px; border-right: 0; border-left: 0; border-radius: 0; }
   .lifecycle--shape .flow-canvas { height: 1350px; }
   .flow-canvas { height: 980px; }
-  .lifecycle--delivery .flow-canvas { height: 2200px; }
+  .lifecycle--delivery .flow-canvas { height: 2350px; }
   .flow-transcript { padding: 20px 22px; }
   .flow-transcript ol { grid-template-columns: 1fr; gap: 12px; }
   .roles { gap: 54px; }

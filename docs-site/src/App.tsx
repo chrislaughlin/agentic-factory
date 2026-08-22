@@ -329,15 +329,21 @@ const deliveryNodes: Node[] = [
     data: { label: 'watch-change', detail: 'Monitor CI and review feedback', kind: 'specialist' },
   },
   {
-    id: 'human-review',
+    id: 'show-me',
     type: 'route',
     position: { x: 3300, y: 300 },
+    data: { label: 'show-me', detail: 'Explain what was just built visually', kind: 'specialist' },
+  },
+  {
+    id: 'human-review',
+    type: 'route',
+    position: { x: 3520, y: 300 },
     data: { label: 'Human review gate', detail: 'Green and settled', kind: 'human' },
   },
   {
     id: 'merge',
     type: 'route',
-    position: { x: 3520, y: 300 },
+    position: { x: 3740, y: 300 },
     data: { label: 'Human merges and deploys', detail: 'Agent Factory stops here', kind: 'terminal' },
   },
 ]
@@ -363,8 +369,9 @@ const deliveryEdges: Edge[] = [
   edge('d18', 'quality', 'pr', 'all local gates pass'),
   edge('d19', 'pr', 'watch'),
   edge('d20', 'watch', 'construct', 'CI failure / changes / conflict', true),
-  edge('d21', 'watch', 'human-review', 'green and settled'),
-  edge('d22', 'human-review', 'merge'),
+  edge('d21', 'watch', 'show-me', 'green and settled'),
+  edge('d22', 'show-me', 'human-review', 'developer explanation'),
+  edge('d23', 'human-review', 'merge'),
 ]
 
 const deliveryMobileNodes = positionNodes(deliveryNodes, {
@@ -385,8 +392,9 @@ const deliveryMobileNodes = positionNodes(deliveryNodes, {
   quality: { x: 120, y: 1560 },
   pr: { x: 120, y: 1690 },
   watch: { x: 120, y: 1820 },
-  'human-review': { x: 120, y: 1950 },
-  merge: { x: 120, y: 2080 },
+  'show-me': { x: 120, y: 1950 },
+  'human-review': { x: 120, y: 2080 },
+  merge: { x: 120, y: 2210 },
 })
 
 const shapeTranscript = [
@@ -418,7 +426,8 @@ const deliveryTranscript = [
   'When every local gate passes, Agent Factory creates a ready PR or MR.',
   'watch-change monitors CI and requested review changes.',
   'CI failures or legitimate requested changes return to construct-work.',
-  'When the change is green and settled, it reaches the human review gate.',
+  'When the change is green and settled, show-me explains the tested change with the smallest useful visual and brief summary.',
+  'The explanation is read-only and cannot waive a failed gate; then the change reaches the human review gate.',
   'Only a human merges and deploys; Agent Factory stops at that boundary.',
 ]
 
@@ -453,7 +462,7 @@ const gateGroups = [
       'review-code-quality must be green before publication; every validated security or quality finding blocks the PR.',
       'CI failures, review requests, and merge conflicts return through remediation and the full verification sequence.',
       'Each distinct feedback batch has up to three remediation cycles; exhaustion stops with evidence and options.',
-      'watch-change waits for green, settled feedback. Only the human merges and deploys.',
+      'watch-change waits for green, settled feedback; show-me explains the completed change before human review. Only the human merges and deploys.',
     ],
   },
 ]
@@ -795,7 +804,7 @@ function App() {
               ['Shape', 'research-product · challenge-product · review-work-items'],
               ['Construct', 'construct-work · single production-code writer'],
               ['Verify', 'author-tests · review-security · verify-qa'],
-              ['Finish', 'review-code-quality · watch-change · human review'],
+              ['Finish', 'review-code-quality · watch-change · show-me · human review'],
             ].map(([label, detail]) => (
               <div className="role-channel" key={label}>
                 <strong>{label}</strong>
