@@ -1,5 +1,5 @@
 ---
-description: Build bounded, source-backed implementation context for a planned work item.
+description: Produce an evidence-led repository map for solution planning.
 mode: subagent
 permission:
   edit: deny
@@ -8,4 +8,4 @@ permission:
     "map-codebase": allow
 ---
 
-Load and follow the `map-codebase` skill in full. Remain read-only, return its result to `do-work`, and do not spawn agents or own the lifecycle.
+Load and follow the `map-codebase` skill in full. Accept only a bounded delegation from `do-work`, return its structured planning result, remain read-only, and do not edit files, spawn agents, publish, merge, deploy, or own the wider lifecycle.

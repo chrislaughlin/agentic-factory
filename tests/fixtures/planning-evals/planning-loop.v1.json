@@ -1,0 +1,73 @@
+{
+  "schema_version": "planning-eval.v1",
+  "fixture_id": "sanitized-planning-loop",
+  "expected_revision": "205f260e7565a04c3e29780bbc357ef274925329",
+  "recorded_result": {
+    "source": "sanitized-structured-artifacts",
+    "artifacts": [
+      {
+        "schema_version": "planning-result.v1",
+        "kind": "planning-result",
+        "role": "map-codebase",
+        "artifact_id": "map-001",
+        "baseline_sha": "205f260e7565a04c3e29780bbc357ef274925329",
+        "content_hash": "sha256:5b7d68577e74db0e10adcd0d01fc6f9fbe00c52fbe1e35cea6f2b87532789717",
+        "status": "complete",
+        "summary": "Mapped the repository and its construction gates.",
+        "repository_map": {
+          "entry_points": [{"claim": "Planning scripts are local Python entry points.", "sources": ["scripts/"]}],
+          "change_surface": [{"claim": "The validator and evaluator are the relevant change surface.", "sources": ["scripts/validate_planning_artifact.py", "scripts/evaluate_planning.py"]}],
+          "dependencies": [{"claim": "The implementation uses the Python standard library.", "sources": ["scripts/"]}],
+          "verification": [{"claim": "Unit tests, validator, evaluator, and diff checks provide verification.", "sources": ["tests/", "scripts/validate.py"]}],
+          "unknowns": []
+        },
+        "unresolved_decisions": [],
+        "acceptance_mapping": [{"id": "map-acceptance", "source": "Repository context is mapped", "targets": ["repository_map"]}],
+        "verification_mapping": [{"id": "map-verification", "source": "map-acceptance", "targets": ["tests"]}]
+      },
+      {
+        "schema_version": "technical-blueprint.v1",
+        "kind": "technical-blueprint",
+        "role": "design-solution",
+        "artifact_id": "blueprint-001",
+        "baseline_sha": "205f260e7565a04c3e29780bbc357ef274925329",
+        "content_hash": "sha256:0bb470383c267f9184228c1a69fc7a19b986ec59a0eced24de675e563e0b005b",
+        "status": "complete",
+        "change_classification": "security",
+        "scope": {
+          "in_scope": ["Validate structured planning artifacts and preserve gate boundaries."],
+          "out_of_scope": ["Change verify-qa or watch-change responsibilities."]
+        },
+        "implementation": {
+          "components": ["Planning artifact validator and deterministic evaluator."],
+          "interfaces": ["validate_artifact_document and structured fixture assertion paths."],
+          "data_and_state": ["No persisted runtime data is introduced."],
+          "failure_handling": ["Malformed or contract-invalid fixtures block evaluation."],
+          "compatibility": ["Advisory draft validation remains explicitly permissive."]
+        },
+        "risk_controls": {
+          "security": ["Recompute hashes and validate exact contract fields before scoring."],
+          "concurrency": ["Use no shared mutable state."],
+          "performance": ["Keep evaluation bounded and standard-library only."],
+          "operability": ["Emit deterministic structured gate results."],
+          "rollback": ["Revert the checkpoint commit if validation behavior is incompatible."]
+        },
+        "unresolved_decisions": [],
+        "acceptance_mapping": [{"id": "blueprint-acceptance", "source": "Final artifacts are meaningful and traceable", "targets": ["scope", "implementation", "risk_controls"]}],
+        "verification_mapping": [{"id": "blueprint-verification", "source": "blueprint-acceptance", "targets": ["tests/test_issue19_planning.py", "scripts/evaluate_planning.py"]}]
+      }
+    ]
+  },
+  "required_assertions": [
+    {"id": "planning-contract", "artifact_index": 0, "path": "schema_version", "equals": "planning-result.v1"},
+    {"id": "blueprint-contract", "artifact_index": 1, "path": "schema_version", "equals": "technical-blueprint.v1"},
+    {"id": "planning-integrity", "artifact_index": 0, "path": "content_hash", "equals": "sha256:5b7d68577e74db0e10adcd0d01fc6f9fbe00c52fbe1e35cea6f2b87532789717"},
+    {"id": "blueprint-integrity", "artifact_index": 1, "path": "content_hash", "equals": "sha256:0bb470383c267f9184228c1a69fc7a19b986ec59a0eced24de675e563e0b005b"},
+    {"id": "traceability", "artifact_index": 1, "path": "verification_mapping[0].source", "equals": "blueprint-acceptance"},
+    {"id": "approval-gate", "artifact_index": 1, "path": "status", "equals": "complete"}
+  ],
+  "forbidden_matches": [
+    {"id": "no-draft-blueprint", "artifact_index": 1, "path": "status", "equals": "draft"},
+    {"id": "no-unresolved-decision", "artifact_index": 1, "path": "unresolved_decisions[0].status", "equals": "unresolved"}
+  ]
+}

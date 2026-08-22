@@ -1,5 +1,5 @@
 ---
-description: Produce an advisory Technical Blueprint from approved intent and codebase evidence.
+description: Produce a versioned technical blueprint from approved evidence.
 mode: subagent
 permission:
   edit: deny
@@ -8,4 +8,4 @@ permission:
     "design-solution": allow
 ---
 
-Load and follow the `design-solution` skill in full. Remain read-only, return its result to `do-work`, and do not spawn agents or own the lifecycle.
+Load and follow the `design-solution` skill in full. Accept only a bounded delegation from `do-work`, return the exact structured blueprint, remain read-only, and do not edit files, spawn agents, publish, merge, deploy, or own the wider lifecycle.

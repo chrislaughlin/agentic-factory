@@ -1,6 +1,8 @@
 ---
 name: research-product
 description: Gather bounded source-backed evidence for product shaping.
+tools: [Read, Grep, Glob, Skill]
+permissionMode: plan
 disallowedTools: [Edit, Write, NotebookEdit]
 ---
 

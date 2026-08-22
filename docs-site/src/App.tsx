@@ -103,7 +103,7 @@ const shapeNodes: Node[] = [
   {
     id: 'shape',
     type: 'route',
-    position: { x: 240, y: 210 },
+    position: { x: 220, y: 260 },
     data: {
       label: 'shape-work',
       detail: 'Discover, frame, and slice',
@@ -111,67 +111,96 @@ const shapeNodes: Node[] = [
     },
   },
   {
+    id: 'research',
+    type: 'route',
+    position: { x: 440, y: 80 },
+    data: { label: 'research-product', detail: 'Bounded evidence with provenance', kind: 'specialist' },
+  },
+  {
+    id: 'challenge',
+    type: 'route',
+    position: { x: 440, y: 440 },
+    data: { label: 'challenge-product', detail: 'Independent assumptions and risk challenge', kind: 'specialist' },
+  },
+  {
+    id: 'frame',
+    type: 'route',
+    position: { x: 660, y: 260 },
+    data: { label: 'Frame and rank', detail: 'Outcome, assumptions, unknowns, and options' },
+  },
+  {
     id: 'investment',
     type: 'route',
-    position: { x: 480, y: 210 },
-    data: { label: 'Investment gate', detail: 'Human decision', kind: 'gate' },
+    position: { x: 880, y: 260 },
+    data: { label: 'Investment gate', detail: 'Human chooses one disposition', kind: 'gate' },
   },
   {
     id: 'learning',
     type: 'route',
-    position: { x: 740, y: 0 },
-    data: { label: 'Learning item', detail: 'Evidence returns to shaping' },
+    position: { x: 1100, y: 0 },
+    data: { label: 'Experiment', detail: 'Cheapest valid test with thresholds' },
   },
   {
     id: 'reframe',
     type: 'route',
-    position: { x: 740, y: 140 },
+    position: { x: 1100, y: 140 },
     data: { label: 'Reframe', detail: 'Change the problem or opportunity' },
   },
   {
     id: 'park',
     type: 'route',
-    position: { x: 740, y: 280 },
+    position: { x: 1100, y: 280 },
     data: { label: 'Park', detail: 'Stop investment deliberately' },
   },
   {
     id: 'decision',
     type: 'route',
-    position: { x: 1000, y: 280 },
+    position: { x: 1320, y: 280 },
     data: { label: 'Decision record', detail: 'Preserve why work stopped', kind: 'terminal' },
   },
   {
     id: 'advance',
     type: 'route',
-    position: { x: 740, y: 420 },
-    data: { label: 'Advance', detail: 'Move grounded work forward' },
+    position: { x: 1100, y: 420 },
+    data: { label: 'Advance', detail: 'Create the smallest valuable slice' },
+  },
+  {
+    id: 'slice',
+    type: 'route',
+    position: { x: 1320, y: 420 },
+    data: { label: 'Slice and sequence', detail: 'Dependencies, stop conditions, delivery mode' },
   },
   {
     id: 'review',
     type: 'route',
-    position: { x: 1000, y: 420 },
-    data: { label: 'Review and approve', detail: 'Human work-item gate', kind: 'human' },
+    position: { x: 1540, y: 420 },
+    data: { label: 'review-work-items', detail: 'Independent readiness review', kind: 'specialist' },
   },
   {
     id: 'backlog',
     type: 'route',
-    position: { x: 1260, y: 420 },
-    data: { label: 'Ready work items / backlog', detail: 'Human selects when delivery begins', kind: 'terminal' },
+    position: { x: 1760, y: 420 },
+    data: { label: 'Approved ready backlog', detail: 'Human selects one item for do-work', kind: 'terminal' },
   },
 ]
 
 const shapeEdges: Edge[] = [
   edge('s1', 'input', 'shape'),
-  edge('s2', 'shape', 'investment'),
-  edge('s3', 'investment', 'learning', 'experiment'),
-  edge('s5', 'learning', 'shape', 'new evidence', true),
-  edge('s6', 'investment', 'reframe', 'reframe'),
-  edge('s7', 'reframe', 'shape', 'reshape', true),
-  edge('s8', 'investment', 'park', 'park'),
-  edge('s9', 'park', 'decision'),
-  edge('s10', 'investment', 'advance', 'advance'),
-  edge('s11', 'advance', 'review'),
-  edge('s12', 'review', 'backlog'),
+  edge('s2', 'shape', 'research'),
+  edge('s3', 'shape', 'challenge'),
+  edge('s4', 'research', 'frame'),
+  edge('s5', 'challenge', 'frame'),
+  edge('s6', 'frame', 'investment'),
+  edge('s7', 'investment', 'learning', 'experiment'),
+  edge('s8', 'learning', 'shape', 'new evidence', true),
+  edge('s9', 'investment', 'reframe', 'reframe'),
+  edge('s10', 'reframe', 'shape', 'reshape', true),
+  edge('s11', 'investment', 'park', 'park'),
+  edge('s12', 'park', 'decision'),
+  edge('s13', 'investment', 'advance', 'advance'),
+  edge('s14', 'advance', 'slice'),
+  edge('s15', 'slice', 'review'),
+  edge('s16', 'review', 'backlog', 'human approval'),
 ]
 
 const positionNodes = (
@@ -182,14 +211,18 @@ const positionNodes = (
 const shapeMobileNodes = positionNodes(shapeNodes, {
   input: { x: 120, y: 0 },
   shape: { x: 120, y: 130 },
-  investment: { x: 120, y: 260 },
-  learning: { x: 0, y: 420 },
-  reframe: { x: 240, y: 420 },
-  park: { x: 0, y: 570 },
-  advance: { x: 240, y: 570 },
-  decision: { x: 0, y: 720 },
-  review: { x: 240, y: 720 },
-  backlog: { x: 240, y: 870 },
+  research: { x: 0, y: 260 },
+  challenge: { x: 240, y: 260 },
+  frame: { x: 120, y: 390 },
+  investment: { x: 120, y: 520 },
+  learning: { x: 0, y: 650 },
+  reframe: { x: 240, y: 650 },
+  park: { x: 0, y: 800 },
+  advance: { x: 240, y: 800 },
+  decision: { x: 0, y: 950 },
+  slice: { x: 240, y: 950 },
+  review: { x: 240, y: 1080 },
+  backlog: { x: 240, y: 1210 },
 })
 
 const deliveryNodes: Node[] = [
@@ -202,128 +235,236 @@ const deliveryNodes: Node[] = [
   {
     id: 'do-work',
     type: 'route',
-    position: { x: 220, y: 250 },
+    position: { x: 220, y: 300 },
     data: { label: 'do-work', detail: 'Inspect, grill, and plan', kind: 'specialist' },
+  },
+  {
+    id: 'discovery',
+    type: 'route',
+    position: { x: 440, y: 300 },
+    data: { label: 'Repository discovery', detail: 'Facts, commands, risks, and forge rules' },
+  },
+  {
+    id: 'map',
+    type: 'route',
+    position: { x: 660, y: 300 },
+    data: { label: 'map-codebase', detail: 'Evidence-led repository map', kind: 'specialist' },
+  },
+  {
+    id: 'design',
+    type: 'route',
+    position: { x: 880, y: 300 },
+    data: { label: 'design-solution', detail: 'Versioned technical blueprint', kind: 'specialist' },
+  },
+  {
+    id: 'plan-review',
+    type: 'route',
+    position: { x: 1100, y: 80 },
+    data: { label: 'review-technical-plan', detail: 'Risk-triggered independent review', kind: 'specialist' },
+  },
+  {
+    id: 'reconcile',
+    type: 'route',
+    position: { x: 1100, y: 300 },
+    data: { label: 'Reconcile and re-question', detail: 'Resolve findings and decisions', kind: 'gate' },
+  },
+  {
+    id: 'artifact',
+    type: 'route',
+    position: { x: 1320, y: 300 },
+    data: { label: 'Exact artifact review', detail: 'Hash, revision, and completeness gate', kind: 'gate' },
   },
   {
     id: 'approval',
     type: 'route',
-    position: { x: 440, y: 250 },
-    data: { label: 'Explicit plan approval', detail: 'No code changes before this gate', kind: 'gate' },
+    position: { x: 1540, y: 300 },
+    data: { label: 'Explicit plan approval', detail: 'No code changes before this gate', kind: 'human' },
+  },
+  {
+    id: 'worktree',
+    type: 'route',
+    position: { x: 1760, y: 300 },
+    data: { label: 'Task worktree', detail: 'Isolated branch and environment preflight' },
   },
   {
     id: 'construct',
     type: 'route',
-    position: { x: 660, y: 250 },
+    position: { x: 1980, y: 300 },
     data: { label: 'construct-work', detail: 'Single production-code writer', kind: 'specialist' },
   },
   {
     id: 'security',
     type: 'route',
-    position: { x: 900, y: 80 },
+    position: { x: 2200, y: 80 },
     data: { label: 'review-security', detail: 'Read-only review at pinned SHA', kind: 'specialist' },
   },
   {
     id: 'tests',
     type: 'route',
-    position: { x: 900, y: 420 },
-    data: { label: 'author-tests', detail: 'Tests and fixtures only', kind: 'specialist' },
+    position: { x: 2200, y: 520 },
+    data: { label: 'author-tests', detail: 'Tests, fixtures, and deterministic evals', kind: 'specialist' },
   },
   {
     id: 'qa',
     type: 'route',
-    position: { x: 1130, y: 250 },
+    position: { x: 2420, y: 300 },
     data: { label: 'verify-qa', detail: 'Runtime acceptance evidence', kind: 'specialist' },
   },
   {
     id: 'quality',
     type: 'route',
-    position: { x: 1360, y: 250 },
+    position: { x: 2640, y: 300 },
     data: { label: 'review-code-quality', detail: 'Strict structural and specification gate', kind: 'specialist' },
   },
   {
     id: 'pr',
     type: 'route',
-    position: { x: 1360, y: 520 },
+    position: { x: 2860, y: 300 },
     data: { label: 'Ready PR / MR', detail: 'Created only after every local gate passes', kind: 'terminal' },
   },
   {
     id: 'watch',
     type: 'route',
-    position: { x: 1590, y: 520 },
+    position: { x: 3080, y: 300 },
     data: { label: 'watch-change', detail: 'Monitor CI and review feedback', kind: 'specialist' },
+  },
+  {
+    id: 'show-me',
+    type: 'route',
+    position: { x: 3300, y: 300 },
+    data: { label: 'show-me', detail: 'Explain what was just built visually', kind: 'specialist' },
   },
   {
     id: 'human-review',
     type: 'route',
-    position: { x: 1820, y: 520 },
+    position: { x: 3520, y: 300 },
     data: { label: 'Human review gate', detail: 'Green and settled', kind: 'human' },
   },
   {
     id: 'merge',
     type: 'route',
-    position: { x: 2050, y: 520 },
+    position: { x: 3740, y: 300 },
     data: { label: 'Human merges and deploys', detail: 'Agent Factory stops here', kind: 'terminal' },
   },
 ]
 
 const deliveryEdges: Edge[] = [
   edge('d1', 'select', 'do-work'),
-  edge('d2', 'do-work', 'approval', 'explicit approval'),
-  edge('d3', 'approval', 'construct'),
-  edge('d4', 'construct', 'security'),
-  edge('d5', 'construct', 'tests'),
-  edge('d6', 'security', 'qa'),
-  edge('d7', 'tests', 'qa'),
-  edge('d8', 'qa', 'quality'),
-  edge('d9', 'quality', 'construct', 'validated finding', true),
-  edge('d10', 'quality', 'pr', 'all local gates pass'),
-  edge('d11', 'pr', 'watch'),
-  edge('d12', 'watch', 'construct', 'CI failure / requested changes', true),
-  edge('d13', 'watch', 'human-review', 'green and settled'),
-  edge('d14', 'human-review', 'merge'),
+  edge('d2', 'do-work', 'discovery'),
+  edge('d3', 'discovery', 'map'),
+  edge('d4', 'map', 'design'),
+  edge('d5', 'design', 'plan-review', 'risk warrants review'),
+  edge('d6', 'design', 'reconcile', 'no review needed'),
+  edge('d7', 'plan-review', 'reconcile', 'findings'),
+  edge('d8', 'reconcile', 'artifact'),
+  edge('d9', 'artifact', 'approval', 'exact final plan'),
+  edge('d10', 'approval', 'worktree'),
+  edge('d11', 'worktree', 'construct'),
+  edge('d12', 'construct', 'security'),
+  edge('d13', 'construct', 'tests'),
+  edge('d14', 'security', 'qa'),
+  edge('d15', 'tests', 'qa'),
+  edge('d16', 'qa', 'quality'),
+  edge('d17', 'quality', 'construct', 'validated finding', true),
+  edge('d18', 'quality', 'pr', 'all local gates pass'),
+  edge('d19', 'pr', 'watch'),
+  edge('d20', 'watch', 'construct', 'CI failure / changes / conflict', true),
+  edge('d21', 'watch', 'show-me', 'green and settled'),
+  edge('d22', 'show-me', 'human-review', 'developer explanation'),
+  edge('d23', 'human-review', 'merge'),
 ]
 
 const deliveryMobileNodes = positionNodes(deliveryNodes, {
   select: { x: 120, y: 0 },
   'do-work': { x: 120, y: 130 },
-  approval: { x: 120, y: 260 },
-  construct: { x: 120, y: 390 },
-  security: { x: 0, y: 550 },
-  tests: { x: 240, y: 550 },
-  qa: { x: 120, y: 720 },
-  quality: { x: 120, y: 850 },
-  pr: { x: 120, y: 980 },
-  watch: { x: 120, y: 1110 },
-  'human-review': { x: 120, y: 1240 },
-  merge: { x: 120, y: 1370 },
+  discovery: { x: 120, y: 260 },
+  map: { x: 120, y: 390 },
+  design: { x: 120, y: 520 },
+  'plan-review': { x: 0, y: 650 },
+  reconcile: { x: 240, y: 650 },
+  artifact: { x: 120, y: 780 },
+  approval: { x: 120, y: 910 },
+  worktree: { x: 120, y: 1040 },
+  construct: { x: 120, y: 1170 },
+  security: { x: 0, y: 1300 },
+  tests: { x: 240, y: 1300 },
+  qa: { x: 120, y: 1430 },
+  quality: { x: 120, y: 1560 },
+  pr: { x: 120, y: 1690 },
+  watch: { x: 120, y: 1820 },
+  'show-me': { x: 120, y: 1950 },
+  'human-review': { x: 120, y: 2080 },
+  merge: { x: 120, y: 2210 },
 })
 
 const shapeTranscript = [
   'Start with an idea, evidence, research, or a PRD.',
-  'shape-work discovers, frames, and slices the opportunity.',
-  'At the investment gate, a human chooses experiment, reframe, park, or advance.',
-  'Experiment creates a learning item that returns evidence to shape-work.',
+  'shape-work classifies input maturity, preserves provenance, and discovers available context.',
+  'research-product gathers bounded evidence while challenge-product independently tests assumptions and risks.',
+  'shape-work synthesizes outcomes, constraints, metrics, unknowns, and an opportunity/assumption map.',
+  'At the investment gate, a human chooses advance, experiment, reframe, park, or phase-gate.',
+  'Experiment creates a learning item with thresholds and a decision it unlocks; evidence returns to shape-work.',
   'Reframe returns the changed problem to shape-work.',
   'Park ends in a durable decision record.',
-  'Advance moves to human review and approval of the work items.',
-  'Approved items enter the ready backlog and wait for deliberate human selection.',
+  'Advance creates the smallest valuable slice, makes dependencies and stop conditions explicit, and selects a delivery mode.',
+  'review-work-items independently checks the complete draft set before human approval.',
+  'Approved items enter the ready backlog and wait for deliberate human selection; shaping never invokes do-work automatically.',
 ]
 
 const deliveryTranscript = [
   'A human selects one ready work reference.',
-  'do-work inspects the repository, grills the task, and produces a decision-complete plan.',
-  'Production changes wait for explicit human plan approval.',
+  'do-work interrogates the task, discovers repository facts, and asks one material decision at a time.',
+  'map-codebase and design-solution produce evidence-backed planning artifacts.',
+  'review-technical-plan activates for multi-layer changes, material risk, broad-impact bug fixes, or unknown classifications.',
+  'Findings are reconciled, the exact final artifact is checked for revision and hash integrity, and a human approves the plan.',
+  'The parent prepares an isolated task worktree and preflights identity, access, and environment parity.',
   'construct-work is the single production-code writer.',
-  'Security reviews the pinned construction SHA while tests and fixtures are authored in parallel.',
+  'review-security checks the pinned construction SHA while author-tests owns tests, fixtures, and deterministic evaluations in parallel.',
   'verify-qa joins both paths and requires runtime acceptance evidence.',
   'review-code-quality runs the final strict local gate.',
-  'Validated findings return to construct-work for remediation.',
+  'Any validated finding, test failure, CI failure, requested change, or merge conflict returns to construct-work for remediation.',
   'When every local gate passes, Agent Factory creates a ready PR or MR.',
   'watch-change monitors CI and requested review changes.',
   'CI failures or legitimate requested changes return to construct-work.',
-  'When the change is green and settled, it reaches the human review gate.',
+  'When the change is green and settled, show-me explains the tested change with the smallest useful visual and brief summary.',
+  'The explanation is read-only and cannot waive a failed gate; then the change reaches the human review gate.',
   'Only a human merges and deploys; Agent Factory stops at that boundary.',
+]
+
+const gateGroups = [
+  {
+    number: '01',
+    title: 'Plan before code',
+    summary: 'Material ambiguity is resolved with the human before construction starts.',
+    items: [
+      'Repository discovery records architecture, commands, runtime paths, forge rules, and environment prerequisites.',
+      'map-codebase and design-solution produce versioned, hashable planning artifacts with evidence and traceability.',
+      'review-technical-plan activates for multi-layer changes, auth, migrations, material risk, broad-impact bug fixes, or unknown classifications.',
+      'The exact final artifact is reviewed, decision-complete, and explicitly approved by a human.',
+    ],
+  },
+  {
+    number: '02',
+    title: 'Verify the change',
+    summary: 'Every stage leaves evidence that the next stage can independently check.',
+    items: [
+      'Each work item gets an isolated task branch and dedicated worktree; the invoking checkout stays untouched.',
+      'construct-work owns production code. author-tests owns tests and fixtures. Checkpoint commits are independently attested.',
+      'review-security checks the immutable construction SHA while tests run in parallel; verify-qa requires runtime evidence.',
+      'The deterministic evaluator requires 100% required-assertion recall and zero forbidden matches; malformed input blocks the gate.',
+    ],
+  },
+  {
+    number: '03',
+    title: 'Publish, then hand off',
+    summary: 'A PR is an earned state, and the final decision remains human-owned.',
+    items: [
+      'review-code-quality must be green before publication; every validated security or quality finding blocks the PR.',
+      'CI failures, review requests, and merge conflicts return through remediation and the full verification sequence.',
+      'Each distinct feedback batch has up to three remediation cycles; exhaustion stops with evidence and options.',
+      'watch-change waits for green, settled feedback; show-me explains the completed change before human review. Only the human merges and deploys.',
+    ],
+  },
 ]
 
 function CommandBlock({
@@ -471,6 +612,7 @@ function App() {
         <nav aria-label="Primary navigation">
           <a href="#system">System</a>
           <a href="#flows">Flows</a>
+          <a href="#gates">Gates</a>
           <a href="#roles">Agents</a>
           <a href="#start">Start</a>
         </nav>
@@ -561,6 +703,39 @@ function App() {
           </div>
         </section>
 
+        <section className="gatebook" id="gates" aria-labelledby="gatebook-title">
+          <div className="gatebook-heading">
+            <span className="section-kicker">The operating contract</span>
+            <h2 id="gatebook-title">Gates are evidence, not ceremony.</h2>
+            <p>
+              The current workflow is designed to make bad assumptions, unsafe
+              changes, and incomplete verification visible before they become
+              someone else’s incident.
+            </p>
+          </div>
+          <div className="gate-grid">
+            {gateGroups.map((group) => (
+              <article className="gate-card" key={group.number}>
+                <span className="gate-number">{group.number}</span>
+                <h3>{group.title}</h3>
+                <p>{group.summary}</p>
+                <ul>
+                  {group.items.map((item) => <li key={item}>{item}</li>)}
+                </ul>
+              </article>
+            ))}
+          </div>
+          <div className="gate-callout">
+            <strong>When a bug has a wider blast radius</strong>
+            <span>
+              A fix that crosses shared abstractions, state, contracts, or
+              multiple consumers is treated as broad-impact work. It triggers
+              the technical-plan review and expands acceptance evidence before
+              construction—not after the regression ships.
+            </span>
+          </div>
+        </section>
+
         <section className="lifecycle lifecycle--shape" id="shape-flow" aria-labelledby="shape-title">
           <div className="lifecycle-heading">
             <div>
@@ -620,7 +795,8 @@ function App() {
             <p>
               Agent Factory makes responsibility visible. Production code has
               one writer. Test authors stay inside tests and fixtures. Reviewers
-              remain read-only. Every material finding blocks publication.
+              are constrained by their harness role and cannot waive a failed
+              gate. Every material finding blocks publication.
             </p>
           </div>
           <div className="role-channels">
@@ -628,7 +804,7 @@ function App() {
               ['Shape', 'research-product · challenge-product · review-work-items'],
               ['Construct', 'construct-work · single production-code writer'],
               ['Verify', 'author-tests · review-security · verify-qa'],
-              ['Finish', 'review-code-quality · watch-change · human review'],
+              ['Finish', 'review-code-quality · watch-change · show-me · human review'],
             ].map(([label, detail]) => (
               <div className="role-channel" key={label}>
                 <strong>{label}</strong>

@@ -1,7 +1,7 @@
 ---
 name: verify-qa
 description: Validate every acceptance criterion against the tested revision with runtime evidence.
-tools: [Read, Grep, Glob, Bash, Skill]
+tools: [Read, Grep, Glob, Skill]
 permissionMode: plan
 skills: [verify-qa]
 disallowedTools: [Edit, Write, NotebookEdit]

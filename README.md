@@ -26,41 +26,56 @@ Shaping and delivery are separate lifecycles. Shaping usually happens first, but
 
 ```mermaid
 flowchart LR
-  I["Idea / evidence / PRD"] --> X["shape-work: discover, frame, slice"]
-  X --> G{"Investment gate"}
-  G -->|"experiment"| E["Learning item"]
+  I["Idea / evidence / PRD"] --> X["shape-work: classify, discover, frame"]
+  X --> RP["research-product"]
+  X --> CP["challenge-product"]
+  RP --> F["Frame outcomes, assumptions, unknowns"]
+  CP --> F
+  F --> G{"Investment gate"}
+  G -->|"experiment"| E["Learning item with thresholds"]
   E --> X
   G -->|"reframe"| X
   G -->|"park"| K["Decision record"]
-  G -->|"advance"| R["Review and approve work items"]
-  R --> B["Ready work items / backlog"]
+  G -->|"phase-gate"| K
+  G -->|"advance"| S["Slice, sequence, and choose delivery mode"]
+  S --> R["review-work-items"]
+  R -->|"human approval"| B["Approved ready backlog"]
+  B -.->|"deliberate handoff"| D["$do-work one item at a time"]
 ```
 
 ### Do work
 
 ```mermaid
 flowchart LR
-  H["Human selects one ready work reference"] --> D["do-work: inspect, grill, plan"]
-  D --> MC["map-codebase"]
+  H["Human selects one ready work reference"] --> D["do-work: interrogate, inspect, grill"]
+  D --> RD["Repository discovery"]
+  RD --> MC["map-codebase"]
   MC --> DS["design-solution"]
-  DS --> RTP["review-technical-plan when risk warrants"]
-  RTP -->|"explicit approval"| C["construct-work"]
+  DS -->|"risk warrants"| RTP["review-technical-plan"]
+  DS -->|"no review needed"| RC["Reconcile and re-question"]
+  RTP --> RC
+  RC --> AR["Exact artifact review: hash, revision, completeness"]
+  AR -->|"explicit human approval"| WT["Task worktree and environment preflight"]
+  WT --> C["construct-work"]
   C --> S["review-security at pinned SHA"]
-  C --> T["author-tests"]
-  S --> Q["verify-qa"]
+  C --> T["author-tests + deterministic evals"]
+  S --> Q["verify-qa: runtime evidence"]
   T --> Q
   Q --> R["review-code-quality"]
-  R -->|"validated finding"| C
+  R -->|"validated finding / test failure"| C
   R -->|"all local gates pass"| P["Ready PR/MR"]
   P --> W["watch-change"]
-  W -->|"CI failure or requested changes"| C
-  W -->|"green and settled"| G["Human review gate"]
+  W -->|"CI failure, requested changes, or merge conflict"| C
+  W -->|"green and settled"| SM["show-me: explain what was built"]
+  SM --> G["Human review gate"]
   G --> M["Human merges and deploys"]
 ```
 
-`do-work` always remains the orchestrator. Specialists cannot spawn agents or inherit the lifecycle. Production code has one writer (`construct-work`); security, QA, code-quality review, and remote monitoring are read-only; `author-tests` may change only tests and fixtures.
+`do-work` always remains the orchestrator. Specialists cannot spawn agents or inherit the lifecycle. Production code has one writer (`construct-work`); security, QA, code-quality review, remote monitoring, and `show-me` are read-only; `author-tests` may change only tests and fixtures. After CI is green and review feedback is settled, `show-me` gives the developer a concise visual explanation of the tested change before human review.
 
-After plan approval, each work item receives a dedicated task branch and Git worktree under the narrowly writable Agent Factory worktree root. Writable stages preflight checkout identity and access, and the parent independently attests every construction checkpoint before verification. Required ignored local environment files—including repository-referenced nonstandard names—are copied from the journaled invoking checkout into matching relative paths without exposing their contents; unsafe symlinks, collisions, modified tracked files, and non-ignored environment files block delegation. Construction, tests, runtime QA, review, publication, and remediation use that worktree; the checkout where the human invoked `do-work` remains untouched. The journal lives in the Git common directory and records both absolute checkout paths for safe resumption. Agent Factory retains the worktree at handoff so the human can inspect it and remove it after review or merge.
+Planning is an explicit sequence: initial questions → repository discovery → read-only codebase mapping → follow-up questions → solution design → follow-up questions → conditional technical-plan review → reconciliation → exact final reconciled blueprint review → explicit human approval → construction. `review-technical-plan` is required for multi-layer, API/shared-type/schema/migration/auth/rollout, material security/concurrency/performance/operability, broad-impact bug fixes, unresolved material decisions, and unknown classifications. A material blueprint change or content-hash mismatch requires review of the exact new artifact.
+
+After plan approval, each work item receives a dedicated task branch and Git worktree under the narrowly writable Agent Factory worktree root, created from the recorded baseline. Writable stages preflight checkout identity and access, and the parent independently attests every construction checkpoint before verification. Required ignored local environment files—including repository-referenced nonstandard names—are copied from the journaled invoking checkout into matching relative paths without exposing their contents; unsafe symlinks, collisions, modified tracked files, and non-ignored environment files block delegation. Construction, tests, runtime QA, review, publication, and remediation use that worktree; the checkout where the human invoked `do-work` remains untouched. The journal lives in the Git common directory and records both absolute checkout paths for safe resumption. Agent Factory retains the worktree at handoff so the human can inspect it and remove it after review or merge.
 
 ## Included skills
 
@@ -70,16 +85,17 @@ After plan approval, each work item receives a dedicated task branch and Git wor
 | `research-product` | Independent user, market, domain, and repository evidence research |
 | `challenge-product` | Independent assumptions, risks, options, and experiment challenge |
 | `review-work-items` | Independent work-item readiness and slicing review |
+| `map-codebase` | Read-only repository mapping for implementation planning |
+| `design-solution` | Read-only versioned technical blueprint design |
+| `review-technical-plan` | Conditional read-only review of the exact final blueprint |
 | `do-work` | User-invoked lifecycle orchestrator |
-| `map-codebase` | Bounded, evidence-backed implementation-context mapping |
-| `design-solution` | Coherent advisory Technical Blueprint design |
-| `review-technical-plan` | Risk-triggered independent blueprint challenge |
 | `construct-work` | Approved production implementation and remediation |
 | `author-tests` | Test/fixture authoring and deterministic checks |
 | `review-security` | Pinned-revision security review |
 | `verify-qa` | Runtime acceptance verification |
 | `review-code-quality` | Strict structural and specification review |
 | `watch-change` | GitHub/GitLab CI and review monitoring |
+| `show-me` | Concise visual explanation of the completed change |
 
 Canonical skills live in [`.agents/skills`](.agents/skills). Neutral role descriptions live in [`agents`](agents), and thin native definitions live in [`adapters`](adapters). Adapters intentionally do not pin models; they inherit the user's harness defaults.
 
@@ -111,6 +127,24 @@ The adapter formats follow the current [Codex](https://learn.chatgpt.com/docs/ag
 No repository setup step or Agent Factory configuration file is required. At the start of each work item, `do-work` inspects the live repository and forge to discover its instructions, architecture, branch conventions, environment prerequisites, verification commands, runtime QA paths, publication rules, and required checks.
 
 The discovered context and its sources are recorded in the local work journal under Git's shared private metadata at `<git-common-directory>/agent-factory/work/<task-key>.md`. Relevant context is passed to specialists with the approved plan, avoiding a duplicate committed description of the repository. On resume, `do-work` refreshes facts whose sources changed.
+
+Planning artifacts use the versioned contracts in [`contracts`](contracts): `planning-result.v1` for evidence and mapping, and `technical-blueprint.v1` for the exact construction proposal. They include artifact identity, baseline SHA, canonical content hash, unresolved decisions, and acceptance/verification mappings. Live artifacts remain private. The portable evaluator reads only committed sanitized structured artifacts and recorded results:
+
+```sh
+python3 scripts/evaluate_planning.py
+```
+
+Before technical-plan review and explicit approval, validate the exact private artifact against its recorded baseline with the local, standard-library gate:
+
+```sh
+python3 scripts/validate_planning_artifact.py --stage approval --artifact <artifact.json> --expected-revision <recorded-baseline-sha> --repository <repository-root>
+```
+
+Final `review` and `approval` validation requires a complete artifact with no unresolved decisions; technical blueprints must also contain meaningful scope, implementation/change-surface, traceability, and classification-specific controls. Use `--stage advisory` only when explicitly validating a non-final draft.
+
+It recomputes the canonical content hash and resolves the baseline locally; missing expected revision context, tampering, and revision mismatches fail closed.
+
+It passes only with 100% required assertion recall and zero forbidden matches; missing or malformed input is blocked.
 
 ## Operating rules
 

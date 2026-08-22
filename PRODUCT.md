@@ -32,10 +32,13 @@ The workflow operates natively across Codex, Claude Code, and OpenCode without i
 
 - Supports Codex, Claude Code, and OpenCode through portable skills and native agent adapters.
 - Requires explicit plan approval before production code changes begin.
+- Uses an interrogated planning sequence of initial questions, repository discovery, read-only mapping, solution design, conditional technical-plan review, reconciliation, exact final-artifact review, and explicit approval before construction.
 - Uses a single production-code writer; review roles are read-only, and the test author may edit only tests and fixtures.
+- Uses versioned planning-result and technical-blueprint contracts with artifact identity, baseline SHA, canonical content hash, unresolved decisions, and acceptance/verification mappings.
 - Requires runtime evidence for observable behavior and treats validated security and code-quality findings as publication blockers.
 - Preserves the invoking checkout by performing approved work in a dedicated worktree.
 - Never merges, enables auto-merge, changes branch-protection rules, deploys, or stores secrets.
+- Evaluates planning behavior with a portable deterministic runner over sanitized committed fixtures only; required assertion recall must be 100% and forbidden matches must be 0%.
 - Stops for human decisions at investment, approval, merge, deployment, conflict, unsafe-request, scope-expansion, and missing-authority gates.
 - The current documentation surface is an early React 19, TypeScript, and Vite 8 project under `docs-site/`.
 

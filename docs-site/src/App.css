@@ -485,6 +485,123 @@ h1 {
 
 .flow-key .key-loop { border-top-style: dashed; }
 
+.gatebook {
+  padding: clamp(96px, 12vw, 170px) var(--page-pad);
+  background: #111214;
+  color: white;
+  border-top: 1px solid #34373c;
+}
+
+.gatebook-heading {
+  display: grid;
+  grid-template-columns: minmax(180px, 0.42fr) minmax(320px, 1fr) minmax(260px, 0.72fr);
+  gap: clamp(28px, 5vw, 80px);
+  align-items: end;
+  margin-bottom: 58px;
+}
+
+.section-kicker {
+  align-self: start;
+  color: #8fa8ff;
+  font-family: var(--display);
+  font-size: 1rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.gatebook h2 {
+  max-width: 8ch;
+  margin-bottom: 0;
+  font-family: var(--display);
+  font-size: clamp(3.4rem, 6vw, 6rem);
+  font-weight: 400;
+  line-height: 0.92;
+  letter-spacing: 0.005em;
+}
+
+.gatebook-heading p {
+  max-width: 40ch;
+  margin-bottom: 0;
+  color: #bfc4cc;
+  font-size: 0.96rem;
+  line-height: 1.8;
+}
+
+.gate-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 1px;
+  background: #3a3d42;
+  border: 1px solid #3a3d42;
+}
+
+.gate-card {
+  min-height: 420px;
+  padding: 28px 28px 34px;
+  background: #191a1d;
+}
+
+.gate-number {
+  display: block;
+  margin-bottom: 46px;
+  color: #8fa8ff;
+  font-family: ui-monospace, 'SFMono-Regular', Consolas, monospace;
+  font-size: 0.75rem;
+  letter-spacing: 0.12em;
+}
+
+.gate-card h3 {
+  margin-bottom: 12px;
+  font-family: var(--display);
+  font-size: 2rem;
+  font-weight: 400;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.gate-card > p {
+  min-height: 68px;
+  margin-bottom: 24px;
+  color: #bfc4cc;
+  font-size: 0.84rem;
+  line-height: 1.65;
+}
+
+.gate-card ul {
+  display: grid;
+  gap: 13px;
+  padding: 20px 0 0 18px;
+  margin: 0;
+  color: #e5e7eb;
+  border-top: 1px solid #3a3d42;
+  font-size: 0.77rem;
+  line-height: 1.55;
+}
+
+.gate-card li::marker { color: #8fa8ff; }
+
+.gate-callout {
+  display: grid;
+  grid-template-columns: minmax(240px, 0.55fr) 1fr;
+  gap: 30px;
+  max-width: 1080px;
+  padding: 25px 0 0;
+  margin-top: 28px;
+  color: #bfc4cc;
+  border-top: 1px solid #3a3d42;
+  font-size: 0.82rem;
+  line-height: 1.7;
+}
+
+.gate-callout strong {
+  color: white;
+  font-family: var(--display);
+  font-size: 1.35rem;
+  font-weight: 400;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
 .lifecycle {
   padding-top: clamp(70px, 8vw, 110px);
   padding-bottom: clamp(84px, 10vw, 140px);
@@ -517,7 +634,7 @@ h1 {
   border-bottom: 1px solid var(--line);
 }
 
-.lifecycle--delivery .flow-canvas { height: 700px; }
+.lifecycle--delivery .flow-canvas { height: 760px; }
 
 .route-node {
   position: relative;
@@ -780,6 +897,7 @@ footer {
   .loom { min-height: 760px; }
   .flow-intro,
   .lifecycle-heading,
+  .gatebook-heading,
   .roles,
   .host-band { grid-template-columns: 1fr; }
   .flow-key { grid-template-columns: repeat(3, auto); width: fit-content; }
@@ -847,6 +965,7 @@ footer {
 
   .flow-intro,
   .lifecycle,
+  .gatebook,
   .roles,
   .host-band,
   .start { padding-right: 22px; padding-left: 22px; }
@@ -860,11 +979,19 @@ footer {
   .start h2 { font-size: clamp(3.4rem, 16vw, 4.6rem); }
 
   .flow-key { grid-template-columns: 1fr; }
+  .gatebook-heading { gap: 30px; margin-bottom: 42px; }
+  .gatebook h2 { max-width: 9ch; }
+  .gate-grid { grid-template-columns: 1fr; }
+  .gate-card { min-height: 0; }
+  .gate-number { margin-bottom: 30px; }
+  .gate-card > p { min-height: 0; }
+  .gate-callout { grid-template-columns: 1fr; gap: 12px; }
   .lifecycle { padding-top: 76px; padding-bottom: 92px; }
   .lifecycle-heading { gap: 40px; margin-bottom: 36px; }
   .flow-shell { margin-right: -22px; margin-left: -22px; border-right: 0; border-left: 0; border-radius: 0; }
+  .lifecycle--shape .flow-canvas { height: 1350px; }
   .flow-canvas { height: 980px; }
-  .lifecycle--delivery .flow-canvas { height: 1480px; }
+  .lifecycle--delivery .flow-canvas { height: 2350px; }
   .flow-transcript { padding: 20px 22px; }
   .flow-transcript ol { grid-template-columns: 1fr; gap: 12px; }
   .roles { gap: 54px; }

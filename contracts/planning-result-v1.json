@@ -1,0 +1,86 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "agent-factory/planning-result/v1",
+  "title": "Agent Factory planning result",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "kind",
+    "role",
+    "artifact_id",
+    "baseline_sha",
+    "content_hash",
+    "status",
+    "summary",
+    "repository_map",
+    "unresolved_decisions",
+    "acceptance_mapping",
+    "verification_mapping"
+  ],
+  "properties": {
+    "schema_version": { "const": "planning-result.v1" },
+    "kind": { "const": "planning-result" },
+    "role": { "const": "map-codebase" },
+    "artifact_id": { "$ref": "#/$defs/artifact_id" },
+    "baseline_sha": { "$ref": "#/$defs/sha" },
+    "content_hash": { "$ref": "#/$defs/hash" },
+    "status": { "enum": ["draft", "decision-needed", "complete"] },
+    "summary": { "type": "string", "minLength": 1 },
+    "repository_map": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["entry_points", "change_surface", "dependencies", "verification", "unknowns"],
+      "properties": {
+        "entry_points": { "$ref": "#/$defs/evidence_list" },
+        "change_surface": { "$ref": "#/$defs/evidence_list" },
+        "dependencies": { "$ref": "#/$defs/evidence_list" },
+        "verification": { "$ref": "#/$defs/evidence_list" },
+        "unknowns": { "$ref": "#/$defs/string_list" }
+      }
+    },
+    "unresolved_decisions": { "$ref": "#/$defs/decision_list" },
+    "acceptance_mapping": { "$ref": "#/$defs/mapping_list" },
+    "verification_mapping": { "$ref": "#/$defs/mapping_list" }
+  },
+  "$defs": {
+    "artifact_id": { "type": "string", "pattern": "^[a-z0-9][a-z0-9._-]{2,127}$" },
+    "sha": { "type": "string", "pattern": "^[0-9a-f]{40,64}$" },
+    "hash": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
+    "string_list": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+    "evidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["claim", "sources"],
+      "properties": {
+        "claim": { "type": "string", "minLength": 1 },
+        "sources": { "type": "array", "minItems": 1, "items": { "type": "string", "minLength": 1 } }
+      }
+    },
+    "evidence_list": { "type": "array", "items": { "$ref": "#/$defs/evidence" } },
+    "decision": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "question", "status"],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "question": { "type": "string", "minLength": 1 },
+        "status": { "enum": ["unresolved", "resolved"] },
+        "answer": { "type": "string", "minLength": 1 }
+      }
+    },
+    "decision_list": { "type": "array", "items": { "$ref": "#/$defs/decision" } },
+    "mapping": {
+      "description": "id is unique within the artifact; acceptance mappings define requirement IDs and implementation/change targets, while verification mappings reference those acceptance IDs and declare verification evidence targets.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "source", "targets"],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "source": { "type": "string", "minLength": 1 },
+        "targets": { "type": "array", "minItems": 1, "items": { "type": "string", "minLength": 1 } }
+      }
+    },
+    "mapping_list": { "type": "array", "items": { "$ref": "#/$defs/mapping" } }
+  }
+}

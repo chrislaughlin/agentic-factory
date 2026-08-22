@@ -28,9 +28,10 @@ class InstallerTests(unittest.TestCase):
             source_skills = {path.parent.name for path in (ROOT / ".agents/skills").glob("*/SKILL.md")}
             installed_skills = {path.parent.name for path in (home / ".agents/skills").glob("*/SKILL.md")}
             self.assertEqual(installed_skills, source_skills)
-            self.assertEqual(len(list((home / ".codex/agents").glob("*.toml"))), 12)
-            self.assertEqual(len(list((home / ".claude/agents").glob("*.md"))), 12)
-            self.assertEqual(len(list((home / ".config/opencode/agents").glob("*.md"))), 12)
+            expected_roles = len(list((ROOT / "agents").glob("*.md")))
+            self.assertEqual(len(list((home / ".codex/agents").glob("*.toml"))), expected_roles)
+            self.assertEqual(len(list((home / ".claude/agents").glob("*.md"))), expected_roles)
+            self.assertEqual(len(list((home / ".config/opencode/agents").glob("*.md"))), expected_roles)
             second = install(home, "--harness", "all")
             self.assertNotIn("installed", second.stdout)
             self.assertIn("unchanged", second.stdout)

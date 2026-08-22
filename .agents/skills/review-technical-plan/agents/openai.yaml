@@ -1,4 +1,4 @@
 interface:
   display_name: "Review Technical Plan"
-  short_description: "Adversarially review a risky or complex Technical Blueprint before approval."
-  default_prompt: "Use $review-technical-plan for this bounded planning task."
+  short_description: "Review technical blueprints before construction."
+  default_prompt: "Use $review-technical-plan to independently review the exact reconciled technical blueprint."

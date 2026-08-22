@@ -1,6 +1,6 @@
 ---
 name: do-work
-description: Orchestrate a software work item from a ticket, PRD, specification, URL, or free-form request through planning, construction, independent verification, pull or merge request publication, CI monitoring, and human handoff. Use when the user explicitly asks to run the complete Agent Factory lifecycle.
+description: Orchestrate a software work item from a ticket, PRD, specification, URL, or free-form request through planning, construction, independent verification, pull or merge request publication, CI monitoring, a visual show-me explanation, and human handoff. Use when the user explicitly asks to run the complete Agent Factory lifecycle.
 ---
 
 # Do Work
@@ -31,6 +31,12 @@ If the request cannot form one coherent PR/MR, propose dependency-ordered slices
 
 Present a decision-complete plan containing the goal and user-visible outcome, approved scope and non-goals, codebase evidence/canonical patterns, approach and rationale, affected modules/contracts/shared types, required edge/failure behaviour, constraints and accepted trade-offs, acceptance criteria with verification evidence, migration/compatibility requirements, and non-design execution prerequisites. Wait for explicit approval. Do not edit production code, create a task branch or worktree, or delegate construction before approval.
 
+The planning conversation is an ordered gate, not a single prompt. Follow [planning.md](references/planning.md): initial questions, repository discovery, read-only codebase mapping, one follow-up decision at a time, solution design, one follow-up decision at a time, conditional technical-plan review, reconciliation, exact final reconciled blueprint artifact review, explicit human approval, then construction. Keep planning results and technical blueprints versioned, hashable, and private to the live run; committed evaluation data must be sanitized.
+
+Activate `review-technical-plan` for multi-layer changes; API, shared-type, schema, migration, auth, or rollout changes; material security, concurrency, performance, or operability risk; broad-impact bug fixes through shared abstractions, state, or contracts; unresolved material decisions; and unknown classification. Reconcile every review finding before approval. If material reconciliation changes the exact blueprint or its content hash mismatches, run the review again against that exact final artifact. A skipped review must record the low-risk classification and why no trigger applies.
+
+Construction remains exclusively delegated to `construct-work`; planning, review, QA, publication, monitoring, merge, and deployment ownership remain with their existing lifecycle owners.
+
 ## Execute
 
 After approval, resolve and record the canonical control-checkout root with `git rev-parse --path-format=absolute --show-toplevel`, then derive a repository key, unique task branch, and canonical absolute path under the dedicated resolved root `${AGENT_FACTORY_WORKTREE_ROOT:-$HOME/.agent-factory/worktrees}/<repository-key>/<work-key>`. Confirm the path is outside every existing worktree using `git worktree list --porcelain`, and resolve the repository identity with `git rev-parse --path-format=absolute --git-common-dir`. Create the task branch and worktree from the recorded baseline in one command with `git worktree add -b <task-branch> <absolute-worktree-path> <baseline-sha>`; if it fails, inspect and safely resolve any partial branch state before retrying. If a validated task branch already exists and is not checked out elsewhere, attach it with `git worktree add <absolute-worktree-path> <task-branch>` instead. Record the Git common directory, control checkout, worktree path, branch, and baseline in the journal. Apply the environment bootstrap in [worktree.md](references/worktree.md) before delegating any stage; block rather than delegating with incomplete or unsafe environment-file setup.
@@ -50,6 +56,6 @@ Do not let specialist agents spawn other agents, change the approved scope, waiv
 
 ## Publish and hand off
 
-When every local gate passes, revalidate every journaled environment-file path according to [worktree.md](references/worktree.md), then push and create a ready-for-review PR/MR. Repeat that validation before every later push. Delegate monitoring to `watch-change`. Route legitimate requested changes and CI failures through construction and every local gate before pushing again. Escalate conflicts, scope expansion, unsafe requests, or missing authority.
+When every local gate passes, revalidate every journaled environment-file path according to [worktree.md](references/worktree.md), then push and create a ready-for-review PR/MR. Repeat that validation before every later push. Delegate monitoring to `watch-change`. When CI is green and review feedback is settled, delegate `show-me` with the tested revision, approved plan, changed-file summary, acceptance evidence, test results, and review outcomes. It explains what was built with the smallest useful visual and a brief plain-language summary; it does not change the worktree or waive a gate. Route legitimate requested changes and CI failures through construction and every local gate before pushing again. Escalate conflicts, scope expansion, unsafe requests, or missing authority.
 
 Finish only when CI is green and no requested changes remain. Give the human the PR/MR URL, evidence summary, residual informational notes, manual review instructions, and retained worktree path. Do not remove the worktree automatically; the human may inspect it and remove it after review or merge. The human alone merges and deploys.

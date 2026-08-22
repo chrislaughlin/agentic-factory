@@ -1,0 +1,4 @@
+interface:
+  display_name: "Show Me"
+  short_description: "Explain the completed change visually."
+  default_prompt: "Use $show-me to explain what was just built with the smallest useful visual."

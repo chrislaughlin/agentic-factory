@@ -1,7 +1,16 @@
 {
   "happy_path": {
     "stages": [
-      "planning",
+      "initial-questions",
+      "repository-discovery",
+      "mapping",
+      "planning-follow-up",
+      "design",
+      "design-follow-up",
+      "conditional-technical-review",
+      "reconciliation",
+      "exact-final-artifact-review",
+      "explicit-approval",
       "construction",
       "parallel-verification",
       "qa",
@@ -43,6 +52,21 @@
     "attempt": 3,
     "next_stage": "human-decision",
     "publish": false
+  },
+  "planning_interrogation": {
+    "ordered_stages": ["initial-questions", "repository-discovery", "mapping", "follow-up", "design", "follow-up", "conditional-review", "reconciliation", "exact-final-artifact-review", "explicit-approval", "construction"],
+    "one_material_question_at_a_time": true,
+    "construction_owner": "construct-work"
+  },
+  "technical_plan_review": {
+    "trigger_classes": ["multi-layer", "api", "shared-type", "schema", "migration", "auth", "rollout", "security", "concurrency", "performance", "operability", "broad-impact-bug", "unresolved-material-decision", "unknown"],
+    "review_exact_final_artifact": true,
+    "hash_mismatch_requires_rereview": true
+  },
+  "planning_eval_input": {
+    "malformed_or_missing_status": "blocked",
+    "required_recall_percent": 100,
+    "forbidden_match_count": 0
   },
   "resume": {
     "validate": [

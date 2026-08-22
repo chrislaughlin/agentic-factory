@@ -1,9 +1,10 @@
 ---
 name: design-solution
-description: Produce an advisory Technical Blueprint from approved intent and codebase evidence.
-tools: [Read, Grep, Glob, Bash, Skill]
+description: Produce a versioned technical blueprint from approved evidence.
+tools: [Read, Grep, Glob, Skill]
+permissionMode: plan
 disallowedTools: [Edit, Write, NotebookEdit]
 skills: [design-solution]
 ---
 
-Follow the preloaded skill exactly. Remain read-only, return its result to `do-work`, and do not spawn agents or own the lifecycle.
+Follow the preloaded skill exactly. Accept only a bounded delegation from `do-work`, return the exact structured blueprint, remain read-only, and do not edit files, spawn agents, publish, merge, deploy, or own the wider lifecycle.

@@ -1,4 +1,4 @@
 interface:
   display_name: "Design Solution"
-  short_description: "Produce an advisory Technical Blueprint from approved intent and codebase evidence."
-  default_prompt: "Use $design-solution for this bounded planning task."
+  short_description: "Create a versioned technical blueprint."
+  default_prompt: "Use $design-solution to design the approved solution from the repository map and recorded decisions."

@@ -1,0 +1,9 @@
+# Technical blueprint v1
+
+`contracts/technical-blueprint-v1.json` is the versioned machine-readable contract for the exact solution proposed for construction. It records `schema_version`, `kind: technical-blueprint`, `role: design-solution`, `status`, `artifact_id`, the immutable `baseline_sha`, canonical `content_hash`, change classification, scope, implementation, risk controls, unresolved decisions, and acceptance and verification mappings.
+
+The technical-plan review is required for multi-layer, API/shared-type/schema/migration/auth/rollout, material security/concurrency/performance/operability, broad-impact bug-fix, unresolved-decision, and unknown classifications. A local low-risk change may skip review only when its classification and absence of triggers are explicit.
+
+Review always applies to the exact final reconciled blueprint. If reconciliation changes material content or the hash does not match, discard the prior review and review the new exact artifact before asking for approval.
+
+Before each exact-artifact review and before approval, run `scripts/validate_planning_artifact.py --stage review` or `--stage approval` with the artifact and recorded expected baseline revision. These final stages require `status: complete`, no unresolved decisions, a meaningful human `answer` for every decision marked `resolved`, and meaningful scope, implementation/change-surface, acceptance/verification traceability, and classification-specific controls; syntax-valid metadata is insufficient. The gate recomputes `content_hash`, resolves `baseline_sha` locally, and fails closed when expected revision context is absent or either check fails. Use `--stage advisory` only for explicitly requested non-final validation of an intermediate draft.

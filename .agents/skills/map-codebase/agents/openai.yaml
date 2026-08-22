@@ -1,4 +1,4 @@
 interface:
   display_name: "Map Codebase"
-  short_description: "Build bounded, source-backed implementation context for a planned work item."
-  default_prompt: "Use $map-codebase for this bounded planning task."
+  short_description: "Map repository structure and change surfaces."
+  default_prompt: "Use $map-codebase to produce a read-only repository map for the approved planning item."

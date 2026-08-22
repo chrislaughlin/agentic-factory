@@ -1,7 +1,7 @@
 ---
 name: watch-change
 description: Monitor CI and review feedback on the published PR or MR.
-tools: [Read, Grep, Glob, Bash, Skill]
+tools: [Read, Grep, Glob, Skill]
 permissionMode: plan
 skills: [watch-change]
 disallowedTools: [Edit, Write, NotebookEdit]
