@@ -310,7 +310,7 @@ class Issue19PlanningTests(unittest.TestCase):
                 self.assertIn('sandbox_mode = "read-only"', codex)
                 self.assertIn("disallowedTools: [Edit, Write, NotebookEdit]", claude)
                 self.assertIn("edit: deny", opencode)
-                self.assertRegex(opencode, r"(?m)^\s*bash\s*:\s*deny\s*$")
+                self.assertRegex(opencode, r"(?m)^\s*bash\s*:\s*allow\s*$")
             elif metadata["permission"] == "workspace-write":
                 self.assertIn('sandbox_mode = "workspace-write"', codex)
                 self.assertIn("edit: allow", opencode)
@@ -345,7 +345,7 @@ class Issue19PlanningTests(unittest.TestCase):
                 self.assertIn("permissionMode: plan", claude)
                 self.assertIn("disallowedTools: [Edit, Write, NotebookEdit]", claude)
                 self.assertIn("edit: deny", opencode)
-                self.assertRegex(opencode, r"(?m)^\s*bash\s*:\s*deny\s*$")
+                self.assertRegex(opencode, r"(?m)^\s*bash\s*:\s*allow\s*$")
 
     def test_planning_artifact_gate_rejects_tampering_and_missing_revision_context(self):
         validator = load_artifact_validator()

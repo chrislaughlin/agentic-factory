@@ -34,7 +34,7 @@ class StaticContractTests(unittest.TestCase):
                 self.assertNotIn("Bash", adapter)
                 self.assertNotIn("permissionMode: acceptEdits", adapter)
 
-    def test_read_only_opencode_adapters_have_no_shell_capability(self):
+    def test_read_only_opencode_adapters_allow_shell_without_edit_capability(self):
         manifest = json.loads((ROOT / "agents/manifest.json").read_text())
         for role, metadata in manifest["roles"].items():
             if metadata["permission"] != "read-only":
@@ -42,8 +42,8 @@ class StaticContractTests(unittest.TestCase):
             adapter = (ROOT / "adapters/opencode" / f"{role}.md").read_text()
             with self.subTest(role=role):
                 self.assertIn("edit: deny", adapter)
-                self.assertRegex(adapter, r"(?m)^\s*bash\s*:\s*deny\s*$")
-                self.assertNotRegex(adapter, r"(?m)^\s*bash\s*:\s*(?:allow|ask)\s*$")
+                self.assertRegex(adapter, r"(?m)^\s*bash\s*:\s*allow\s*$")
+                self.assertNotRegex(adapter, r"(?m)^\s*bash\s*:\s*(?:deny|ask)\s*$")
 
     def test_orchestrator_contains_required_gates(self):
         do_work = (ROOT / ".agents/skills/do-work/SKILL.md").read_text()

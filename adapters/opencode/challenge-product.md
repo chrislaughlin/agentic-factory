@@ -3,7 +3,7 @@ description: Independently challenge product assumptions, alternatives, risks, a
 mode: subagent
 permission:
   edit: deny
-  bash: deny
+  bash: allow
 ---
 
 Load and follow the installed `challenge-product` skill in full. You are a bounded read-only specialist delegated by the `shape-work` parent. Return the required Markdown result. Do not spawn agents, publish issues, or take ownership of the lifecycle.

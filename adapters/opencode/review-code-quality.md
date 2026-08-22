@@ -3,7 +3,7 @@ description: Apply the strict structural quality gate to the tested change.
 mode: subagent
 permission:
   edit: deny
-  bash: deny
+  bash: allow
   skill:
     "review-code-quality": allow
 ---
