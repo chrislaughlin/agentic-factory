@@ -634,7 +634,7 @@ h1 {
   border-bottom: 1px solid var(--line);
 }
 
-.lifecycle--delivery .flow-canvas { height: 700px; }
+.lifecycle--delivery .flow-canvas { height: 760px; }
 
 .route-node {
   position: relative;
@@ -990,7 +990,7 @@ footer {
   .lifecycle-heading { gap: 40px; margin-bottom: 36px; }
   .flow-shell { margin-right: -22px; margin-left: -22px; border-right: 0; border-left: 0; border-radius: 0; }
   .flow-canvas { height: 980px; }
-  .lifecycle--delivery .flow-canvas { height: 1480px; }
+  .lifecycle--delivery .flow-canvas { height: 2200px; }
   .flow-transcript { padding: 20px 22px; }
   .flow-transcript ol { grid-template-columns: 1fr; gap: 12px; }
   .roles { gap: 54px; }

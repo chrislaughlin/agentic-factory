@@ -40,20 +40,25 @@ flowchart LR
 
 ```mermaid
 flowchart LR
-  H["Human selects one ready work reference"] --> D["do-work: interrogate, inspect, grill, plan"]
-  D --> MC["map-codebase"]
+  H["Human selects one ready work reference"] --> D["do-work: interrogate, inspect, grill"]
+  D --> RD["Repository discovery"]
+  RD --> MC["map-codebase"]
   MC --> DS["design-solution"]
-  DS --> RTP["review-technical-plan when risk warrants"]
-  RTP -->|"explicit approval"| C["construct-work"]
+  DS -->|"risk warrants"| RTP["review-technical-plan"]
+  DS -->|"no review needed"| RC["Reconcile and re-question"]
+  RTP --> RC
+  RC --> AR["Exact artifact review: hash, revision, completeness"]
+  AR -->|"explicit human approval"| WT["Task worktree and environment preflight"]
+  WT --> C["construct-work"]
   C --> S["review-security at pinned SHA"]
-  C --> T["author-tests"]
-  S --> Q["verify-qa"]
+  C --> T["author-tests + deterministic evals"]
+  S --> Q["verify-qa: runtime evidence"]
   T --> Q
   Q --> R["review-code-quality"]
-  R -->|"validated finding"| C
+  R -->|"validated finding / test failure"| C
   R -->|"all local gates pass"| P["Ready PR/MR"]
   P --> W["watch-change"]
-  W -->|"CI failure or requested changes"| C
+  W -->|"CI failure, requested changes, or merge conflict"| C
   W -->|"green and settled"| G["Human review gate"]
   G --> M["Human merges and deploys"]
 ```
