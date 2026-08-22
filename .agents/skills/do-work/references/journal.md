@@ -24,7 +24,9 @@ Store each run at `<absolute-git-common-directory>/agent-factory/work/<task-key>
 <resolved fields and source evidence required by [repository-discovery.md](repository-discovery.md)>
 
 ## Environment bootstrap
-- <copied relative .env path, or none>
+- Required tracked path: <relative path and evidence, or none>
+- Copied local path: <relative path and status, or none>
+- Parity last validated: <timestamp/status>
 
 ## State
 - Stage: planning | construction | parallel-verification | qa | code-quality | publication | monitoring | human-handoff | blocked

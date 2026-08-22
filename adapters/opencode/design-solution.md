@@ -8,4 +8,4 @@ permission:
     "design-solution": allow
 ---
 
-Load and follow the `design-solution` skill in full. Return the exact structured blueprint. Do not edit files, spawn agents, or own the wider lifecycle.
+Load and follow the `design-solution` skill in full. Accept only a bounded delegation from `do-work`, return the exact structured blueprint, remain read-only, and do not edit files, spawn agents, publish, merge, deploy, or own the wider lifecycle.

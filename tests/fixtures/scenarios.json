@@ -1,15 +1,58 @@
 {
   "happy_path": {
-    "stages": ["initial-questions", "repository-discovery", "mapping", "planning-follow-up", "design", "design-follow-up", "conditional-technical-review", "reconciliation", "exact-final-artifact-review", "explicit-approval", "construction", "parallel-verification", "qa", "code-quality", "publication", "monitoring", "human-handoff"],
+    "stages": [
+      "initial-questions",
+      "repository-discovery",
+      "mapping",
+      "planning-follow-up",
+      "design",
+      "design-follow-up",
+      "conditional-technical-review",
+      "reconciliation",
+      "exact-final-artifact-review",
+      "explicit-approval",
+      "construction",
+      "parallel-verification",
+      "qa",
+      "code-quality",
+      "publication",
+      "monitoring",
+      "human-handoff"
+    ],
     "terminal_owner": "human"
   },
-  "ci_failure": { "monitor_status": "fail", "next_stage": "construction", "fresh_attempt_budget": 3 },
-  "requested_changes": { "monitor_status": "fail", "next_stage": "construction", "fresh_attempt_budget": 3 },
-  "contradictory_feedback": { "monitor_status": "blocked", "next_stage": "human-decision" },
-  "poll_timeout": { "monitor_status": "blocked", "next_stage": "resume-monitoring" },
-  "qa_runtime_unavailable": { "qa_status": "blocked", "publish": false },
-  "validated_quality_finding": { "review_status": "fail", "next_stage": "construction", "publish": false },
-  "third_failed_cycle": { "attempt": 3, "next_stage": "human-decision", "publish": false },
+  "ci_failure": {
+    "monitor_status": "fail",
+    "next_stage": "construction",
+    "fresh_attempt_budget": 3
+  },
+  "requested_changes": {
+    "monitor_status": "fail",
+    "next_stage": "construction",
+    "fresh_attempt_budget": 3
+  },
+  "contradictory_feedback": {
+    "monitor_status": "blocked",
+    "next_stage": "human-decision"
+  },
+  "poll_timeout": {
+    "monitor_status": "blocked",
+    "next_stage": "resume-monitoring"
+  },
+  "qa_runtime_unavailable": {
+    "qa_status": "blocked",
+    "publish": false
+  },
+  "validated_quality_finding": {
+    "review_status": "fail",
+    "next_stage": "construction",
+    "publish": false
+  },
+  "third_failed_cycle": {
+    "attempt": 3,
+    "next_stage": "human-decision",
+    "publish": false
+  },
   "planning_interrogation": {
     "ordered_stages": ["initial-questions", "repository-discovery", "mapping", "follow-up", "design", "follow-up", "conditional-review", "reconciliation", "exact-final-artifact-review", "explicit-approval", "construction"],
     "one_material_question_at_a_time": true,
@@ -25,15 +68,68 @@
     "required_recall_percent": 100,
     "forbidden_match_count": 0
   },
-  "resume": { "validate": ["repository", "worktree", "branch", "head", "recorded revisions"] },
+  "resume": {
+    "validate": [
+      "repository",
+      "worktree",
+      "branch",
+      "head",
+      "recorded revisions"
+    ]
+  },
   "worktree_isolation": {
     "required": true,
-    "writable_stages": ["construction", "author-tests", "remediation"],
+    "writable_stages": [
+      "construction",
+      "author-tests",
+      "remediation"
+    ],
     "primary_checkout_writes": false,
     "copy_ignored_env_files": true,
     "copy_env_symlinks": false,
     "block_modified_tracked_env_files": true,
     "block_destination_symlink_ancestors": true
   },
-  "human_boundary": { "agent_may": ["create ready PR/MR", "monitor CI and reviews"], "agent_must_not": ["merge", "deploy"] }
+  "human_boundary": {
+    "agent_may": [
+      "create ready PR/MR",
+      "monitor CI and reviews"
+    ],
+    "agent_must_not": [
+      "merge",
+      "deploy"
+    ]
+  },
+  "worktree_access_failure": {
+    "status": "blocked",
+    "analysis_started": false,
+    "resume_stage": "construction",
+    "same_plan": true,
+    "same_worktree": true,
+    "consume_attempt": false
+  },
+  "unchanged_construction_sha": {
+    "attestation": "fail",
+    "verification_starts": false
+  },
+  "head_revision_mismatch": {
+    "attestation": "fail",
+    "verification_starts": false
+  },
+  "empty_checkpoint_diff": {
+    "attestation": "fail",
+    "verification_starts": false
+  },
+  "out_of_scope_checkpoint": {
+    "attestation": "fail",
+    "verification_starts": false
+  },
+  "control_checkout_mutation": {
+    "attestation": "fail",
+    "auto_repair": false
+  },
+  "environment_parity_failure": {
+    "status": "blocked",
+    "runtime_starts": false
+  }
 }

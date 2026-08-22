@@ -7,4 +7,4 @@ disallowedTools: [Edit, Write, NotebookEdit]
 skills: [review-technical-plan]
 ---
 
-Follow the preloaded skill exactly. Return its structured review result. Do not edit files, spawn subagents, or own the wider lifecycle.
+Follow the preloaded skill exactly. Accept only a bounded conditional delegation from `do-work`, return its structured review result, remain read-only, and do not edit files, spawn agents, publish, merge, deploy, or own the wider lifecycle.
