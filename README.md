@@ -26,14 +26,21 @@ Shaping and delivery are separate lifecycles. Shaping usually happens first, but
 
 ```mermaid
 flowchart LR
-  I["Idea / evidence / PRD"] --> X["shape-work: discover, frame, slice"]
-  X --> G{"Investment gate"}
-  G -->|"experiment"| E["Learning item"]
+  I["Idea / evidence / PRD"] --> X["shape-work: classify, discover, frame"]
+  X --> RP["research-product"]
+  X --> CP["challenge-product"]
+  RP --> F["Frame outcomes, assumptions, unknowns"]
+  CP --> F
+  F --> G{"Investment gate"}
+  G -->|"experiment"| E["Learning item with thresholds"]
   E --> X
   G -->|"reframe"| X
   G -->|"park"| K["Decision record"]
-  G -->|"advance"| R["Review and approve work items"]
-  R --> B["Ready work items / backlog"]
+  G -->|"phase-gate"| K
+  G -->|"advance"| S["Slice, sequence, and choose delivery mode"]
+  S --> R["review-work-items"]
+  R -->|"human approval"| B["Approved ready backlog"]
+  B -.->|"deliberate handoff"| D["$do-work one item at a time"]
 ```
 
 ### Do work
