@@ -326,6 +326,42 @@ const deliveryTranscript = [
   'Only a human merges and deploys; Agent Factory stops at that boundary.',
 ]
 
+const gateGroups = [
+  {
+    number: '01',
+    title: 'Plan before code',
+    summary: 'Material ambiguity is resolved with the human before construction starts.',
+    items: [
+      'Repository discovery records architecture, commands, runtime paths, forge rules, and environment prerequisites.',
+      'map-codebase and design-solution produce versioned, hashable planning artifacts with evidence and traceability.',
+      'review-technical-plan activates for multi-layer changes, auth, migrations, material risk, broad-impact bug fixes, or unknown classifications.',
+      'The exact final artifact is reviewed, decision-complete, and explicitly approved by a human.',
+    ],
+  },
+  {
+    number: '02',
+    title: 'Verify the change',
+    summary: 'Every stage leaves evidence that the next stage can independently check.',
+    items: [
+      'Each work item gets an isolated task branch and dedicated worktree; the invoking checkout stays untouched.',
+      'construct-work owns production code. author-tests owns tests and fixtures. Checkpoint commits are independently attested.',
+      'review-security checks the immutable construction SHA while tests run in parallel; verify-qa requires runtime evidence.',
+      'The deterministic evaluator requires 100% required-assertion recall and zero forbidden matches; malformed input blocks the gate.',
+    ],
+  },
+  {
+    number: '03',
+    title: 'Publish, then hand off',
+    summary: 'A PR is an earned state, and the final decision remains human-owned.',
+    items: [
+      'review-code-quality must be green before publication; every validated security or quality finding blocks the PR.',
+      'CI failures, review requests, and merge conflicts return through remediation and the full verification sequence.',
+      'Each distinct feedback batch has up to three remediation cycles; exhaustion stops with evidence and options.',
+      'watch-change waits for green, settled feedback. Only the human merges and deploys.',
+    ],
+  },
+]
+
 function CommandBlock({
   command,
   id,
@@ -471,6 +507,7 @@ function App() {
         <nav aria-label="Primary navigation">
           <a href="#system">System</a>
           <a href="#flows">Flows</a>
+          <a href="#gates">Gates</a>
           <a href="#roles">Agents</a>
           <a href="#start">Start</a>
         </nav>
@@ -561,6 +598,39 @@ function App() {
           </div>
         </section>
 
+        <section className="gatebook" id="gates" aria-labelledby="gatebook-title">
+          <div className="gatebook-heading">
+            <span className="section-kicker">The operating contract</span>
+            <h2 id="gatebook-title">Gates are evidence, not ceremony.</h2>
+            <p>
+              The current workflow is designed to make bad assumptions, unsafe
+              changes, and incomplete verification visible before they become
+              someone else’s incident.
+            </p>
+          </div>
+          <div className="gate-grid">
+            {gateGroups.map((group) => (
+              <article className="gate-card" key={group.number}>
+                <span className="gate-number">{group.number}</span>
+                <h3>{group.title}</h3>
+                <p>{group.summary}</p>
+                <ul>
+                  {group.items.map((item) => <li key={item}>{item}</li>)}
+                </ul>
+              </article>
+            ))}
+          </div>
+          <div className="gate-callout">
+            <strong>When a bug has a wider blast radius</strong>
+            <span>
+              A fix that crosses shared abstractions, state, contracts, or
+              multiple consumers is treated as broad-impact work. It triggers
+              the technical-plan review and expands acceptance evidence before
+              construction—not after the regression ships.
+            </span>
+          </div>
+        </section>
+
         <section className="lifecycle lifecycle--shape" id="shape-flow" aria-labelledby="shape-title">
           <div className="lifecycle-heading">
             <div>
@@ -620,7 +690,8 @@ function App() {
             <p>
               Agent Factory makes responsibility visible. Production code has
               one writer. Test authors stay inside tests and fixtures. Reviewers
-              remain read-only. Every material finding blocks publication.
+              are constrained by their harness role and cannot waive a failed
+              gate. Every material finding blocks publication.
             </p>
           </div>
           <div className="role-channels">
