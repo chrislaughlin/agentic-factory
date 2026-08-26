@@ -76,13 +76,13 @@ class Issue21EvalTests(unittest.TestCase):
             },
         )
 
-    def test_declared_output_assertions_override_legacy_fields_for_scoring(self):
+    def test_declared_output_assertions_add_to_fixture_constraints_for_scoring(self):
         script = """
             import { scoreOutput } from './evals/dist/assertions/output.js';
             const testCase = {
               required: ['legacy-required'],
               forbidden: ['legacy-forbidden'],
-              observed: ['declared-required', 'declared-forbidden'],
+              observed: ['declared-required', 'legacy-forbidden', 'declared-forbidden'],
               assertions: [{
                 type: 'output',
                 required: ['declared-required'],
@@ -96,9 +96,12 @@ class Issue21EvalTests(unittest.TestCase):
         self.assertEqual(
             json.loads(result.stdout),
             {
-                "recall": 1,
-                "falsePositiveRate": 1 / 2,
-                "failures": ["forbidden outcomes observed: declared-forbidden"],
+                "recall": 0.5,
+                "falsePositiveRate": 2 / 3,
+                "failures": [
+                    "missed required outcomes: legacy-required",
+                    "forbidden outcomes observed: legacy-forbidden, declared-forbidden",
+                ],
             },
         )
 
