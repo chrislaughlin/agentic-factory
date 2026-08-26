@@ -104,13 +104,13 @@ Canonical skills live in [`.agents/skills`](.agents/skills). Neutral role descri
 The installer supports macOS and Linux, copies by default, and may target one harness or all three:
 
 ```sh
-./scripts/install.sh --harness all
+./scripts/install.sh
 ./scripts/install.sh --harness codex --mode link
 ./scripts/install.sh --harness claude
 ./scripts/install.sh --harness opencode
 ```
 
-Identical destinations are unchanged. A differing destination stops installation. Use `--force` only after reviewing the collision; the old item is moved to a timestamped `.agent-factory-backup-*` path before replacement.
+The default installs to all three harnesses. Identical destinations are unchanged; differing Agent Factory-managed destinations are updated in place. Legacy `.agent-factory-backup-*` directories from older installer versions are removed during installation. Use `--harness` to target one harness.
 
 | Harness | Skills | Custom agents |
 | --- | --- | --- |

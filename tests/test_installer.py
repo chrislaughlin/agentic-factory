@@ -23,7 +23,7 @@ class InstallerTests(unittest.TestCase):
     def test_all_harnesses_install_and_second_run_is_unchanged(self):
         with tempfile.TemporaryDirectory() as directory:
             home = Path(directory)
-            first = install(home, "--harness", "all")
+            first = install(home)
             self.assertIn("installed", first.stdout)
             source_skills = {path.parent.name for path in (ROOT / ".agents/skills").glob("*/SKILL.md")}
             installed_skills = {path.parent.name for path in (home / ".agents/skills").glob("*/SKILL.md")}
@@ -32,24 +32,42 @@ class InstallerTests(unittest.TestCase):
             self.assertEqual(len(list((home / ".codex/agents").glob("*.toml"))), expected_roles)
             self.assertEqual(len(list((home / ".claude/agents").glob("*.md"))), expected_roles)
             self.assertEqual(len(list((home / ".config/opencode/agents").glob("*.md"))), expected_roles)
-            second = install(home, "--harness", "all")
+            second = install(home)
             self.assertNotIn("installed", second.stdout)
             self.assertIn("unchanged", second.stdout)
 
-    def test_collision_refuses_without_force_and_force_backs_up(self):
+    def test_differing_managed_items_are_updated_without_force(self):
         with tempfile.TemporaryDirectory() as directory:
             home = Path(directory)
             target = home / ".codex/agents/construct-work.toml"
             target.parent.mkdir(parents=True)
             target.write_text("personal content\n")
-            refused = install(home, "--harness", "codex", check=False)
-            self.assertNotEqual(refused.returncode, 0)
-            self.assertIn("Refusing to overwrite", refused.stderr)
-            forced = install(home, "--harness", "codex", "--force")
-            self.assertEqual(forced.returncode, 0)
-            backups = list(target.parent.glob("construct-work.toml.agent-factory-backup-*"))
-            self.assertEqual(len(backups), 1)
-            self.assertEqual(backups[0].read_text(), "personal content\n")
+            result = install(home, "--harness", "codex")
+            self.assertEqual(result.returncode, 0)
+            self.assertEqual(target.read_text(), (ROOT / "adapters/codex/construct-work.toml").read_text())
+            self.assertNotIn("--force", result.stdout + result.stderr)
+
+    def test_legacy_skill_backups_are_removed(self):
+        with tempfile.TemporaryDirectory() as directory:
+            home = Path(directory)
+            target_parent = home / ".agents/skills"
+            backup = target_parent / "do-work.agent-factory-backup-20260813T204950Z"
+            backup.mkdir(parents=True)
+            (backup / "SKILL.md").write_text("old version\n")
+            install(home, "--harness", "codex")
+            self.assertFalse(backup.exists())
+            self.assertTrue((target_parent / "do-work/SKILL.md").exists())
+
+    def test_differing_skill_directories_are_updated_in_place(self):
+        with tempfile.TemporaryDirectory() as directory:
+            home = Path(directory)
+            target = home / ".agents/skills/do-work"
+            target.mkdir(parents=True)
+            (target / "SKILL.md").write_text("old version\n")
+            (target / "user-file.txt").write_text("old managed contents\n")
+            install(home, "--harness", "codex")
+            self.assertEqual((target / "SKILL.md").read_text(), (ROOT / ".agents/skills/do-work/SKILL.md").read_text())
+            self.assertFalse((target / "user-file.txt").exists())
 
     def test_link_mode_links_to_canonical_sources(self):
         with tempfile.TemporaryDirectory() as directory:

@@ -2,12 +2,11 @@
 set -eu
 
 usage() {
-  printf '%s\n' 'Usage: scripts/install.sh [--harness all|codex|claude|opencode] [--mode copy|link] [--force] [--dest-home PATH]'
+  printf '%s\n' 'Usage: scripts/install.sh [--harness all|codex|claude|opencode] [--mode copy|link] [--dest-home PATH]'
 }
 
 harness=all
 mode=copy
-force=0
 dest_home=${HOME:?HOME must be set}
 
 while [ "$#" -gt 0 ]; do
@@ -21,10 +20,6 @@ while [ "$#" -gt 0 ]; do
       [ "$#" -ge 2 ] || { usage >&2; exit 2; }
       mode=$2
       shift 2
-      ;;
-    --force)
-      force=1
-      shift
       ;;
     --dest-home)
       [ "$#" -ge 2 ] || { usage >&2; exit 2; }
@@ -48,7 +43,6 @@ case "$mode" in copy|link) ;; *) printf 'Unsupported mode: %s\n' "$mode" >&2; ex
 
 script_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd -P)
 repo_root=$(CDPATH= cd -- "$script_dir/.." && pwd -P)
-backup_suffix=$(date -u +%Y%m%dT%H%M%SZ)
 
 same_item() {
   source_item=$1
@@ -68,24 +62,22 @@ install_item() {
   source_item=$1
   target_item=$2
   target_parent=$(dirname -- "$target_item")
+  item_name=$(basename -- "$target_item")
   mkdir -p "$target_parent"
+
+  for backup_item in "$target_parent/${item_name}.agent-factory-backup-"*; do
+    [ -e "$backup_item" ] || [ -L "$backup_item" ] || continue
+    rm -rf -- "$backup_item"
+    printf 'removed legacy backup %s\n' "$backup_item"
+  done
 
   if [ -e "$target_item" ] || [ -L "$target_item" ]; then
     if same_item "$source_item" "$target_item"; then
       printf 'unchanged %s\n' "$target_item"
       return
     fi
-    if [ "$force" -ne 1 ]; then
-      printf 'Refusing to overwrite differing path: %s (use --force)\n' "$target_item" >&2
-      exit 1
-    fi
-    backup_item="${target_item}.agent-factory-backup-${backup_suffix}"
-    if [ -e "$backup_item" ] || [ -L "$backup_item" ]; then
-      printf 'Backup already exists: %s\n' "$backup_item" >&2
-      exit 1
-    fi
-    mv "$target_item" "$backup_item"
-    printf 'backed up %s -> %s\n' "$target_item" "$backup_item"
+    rm -rf -- "$target_item"
+    printf 'updated %s\n' "$target_item"
   fi
 
   if [ "$mode" = link ]; then
