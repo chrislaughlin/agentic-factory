@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import shutil
 import subprocess
 import tempfile
@@ -12,13 +13,16 @@ EVALS = ROOT / "evals"
 NODE = EVALS / "node_modules" / ".bin" / "tsc"
 
 
-def run_node(source: str) -> subprocess.CompletedProcess[str]:
+def run_node(
+    source: str, *, env: dict[str, str] | None = None
+) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
         ["node", "--input-type=module", "-e", source],
         cwd=ROOT,
         text=True,
         capture_output=True,
         check=False,
+        env=env,
     )
 
 
@@ -96,6 +100,72 @@ class Issue21EvalTests(unittest.TestCase):
                 "falsePositiveRate": 1 / 2,
                 "failures": ["forbidden outcomes observed: declared-forbidden"],
             },
+        )
+
+    def test_live_response_cannot_erase_fixture_forbidden_expectations(self):
+        fixture = {
+            "id": "immutable-forbidden",
+            "role": "author-tests",
+            "scenario": "live response omits immutable fields",
+            "required": [],
+            "forbidden": ["fixture-forbidden"],
+            "observed": [],
+            "assertions": [],
+            "state": {},
+        }
+        response = {"observed": ["fixture-forbidden"], "state": {}}
+        with tempfile.TemporaryDirectory() as directory:
+            launcher = Path(directory) / "live-launcher"
+            launcher.write_text("#!/bin/sh\nprintf '%s\\n' '" + json.dumps(response) + "'\n")
+            launcher.chmod(0o755)
+            script = f"""
+                import {{ runCodex }} from './evals/dist/harnesses/codex.js';
+                import {{ scoreOutput }} from './evals/dist/assertions/output.js';
+                const result = await runCodex({json.dumps(fixture)});
+                console.log(JSON.stringify(scoreOutput(result)));
+            """
+            env = os.environ | {"CODEX_EVAL_COMMAND": str(launcher)}
+            result = run_node(script, env=env)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(
+            json.loads(result.stdout),
+            {
+                "recall": 1,
+                "falsePositiveRate": 1,
+                "failures": ["forbidden outcomes observed: fixture-forbidden"],
+            },
+        )
+
+    def test_live_response_cannot_rewrite_fixture_forbidden_expectations(self):
+        fixture = {
+            "id": "immutable-forbidden-rewrite",
+            "role": "author-tests",
+            "scenario": "live response rewrites immutable field",
+            "required": [],
+            "forbidden": ["fixture-forbidden"],
+            "observed": [],
+            "assertions": [],
+            "state": {},
+        }
+        response = {
+            "forbidden": ["rewritten-forbidden"],
+            "observed": [],
+            "state": {},
+        }
+        with tempfile.TemporaryDirectory() as directory:
+            launcher = Path(directory) / "live-launcher"
+            launcher.write_text("#!/bin/sh\nprintf '%s\\n' '" + json.dumps(response) + "'\n")
+            launcher.chmod(0o755)
+            script = f"""
+                import {{ runCodex }} from './evals/dist/harnesses/codex.js';
+                await runCodex({json.dumps(fixture)});
+            """
+            env = os.environ | {"CODEX_EVAL_COMMAND": str(launcher)}
+            result = run_node(script, env=env)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn(
+            "immutable field forbidden differs from fixture immutable-forbidden-rewrite",
+            result.stderr,
         )
 
     def test_eval_command_does_not_add_untracked_generated_artifacts(self):
