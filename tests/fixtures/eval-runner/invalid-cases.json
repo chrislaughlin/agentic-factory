@@ -1,5 +1,7 @@
 [
   {"name": "malformed-json", "content": "{not-json"},
   {"name": "missing-required-field", "content": [{"id": "incomplete"}]},
-  {"name": "invalid-assertion-type", "content": [{"id": "bad-assertion", "role": "author-tests", "scenario": "invalid", "required": [], "forbidden": [], "observed": [], "assertions": [{"type": "unknown"}], "state": {}}]}
+  {"name": "invalid-assertion-type", "content": [{"id": "bad-assertion", "role": "author-tests", "scenario": "invalid", "required": [], "forbidden": [], "observed": [], "assertions": [{"type": "unknown"}], "state": {}}]},
+  {"name": "invalid-output-required", "content": [{"id": "bad-output-required", "role": "author-tests", "scenario": "invalid", "required": [], "forbidden": [], "observed": [], "assertions": [{"type": "output", "required": ["ok", 1]}], "state": {}}]},
+  {"name": "invalid-output-forbidden", "content": [{"id": "bad-output-forbidden", "role": "author-tests", "scenario": "invalid", "required": [], "forbidden": [], "observed": [], "assertions": [{"type": "output", "forbidden": "not-an-array"}], "state": {}}]}
 ]

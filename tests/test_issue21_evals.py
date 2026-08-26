@@ -72,6 +72,53 @@ class Issue21EvalTests(unittest.TestCase):
             },
         )
 
+    def test_declared_output_assertions_override_legacy_fields_for_scoring(self):
+        script = """
+            import { scoreOutput } from './evals/dist/assertions/output.js';
+            const testCase = {
+              required: ['legacy-required'],
+              forbidden: ['legacy-forbidden'],
+              observed: ['declared-required', 'declared-forbidden'],
+              assertions: [{
+                type: 'output',
+                required: ['declared-required'],
+                forbidden: ['declared-forbidden'],
+              }],
+            };
+            console.log(JSON.stringify(scoreOutput(testCase)));
+        """
+        result = run_node(script)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(
+            json.loads(result.stdout),
+            {
+                "recall": 1,
+                "falsePositiveRate": 1 / 2,
+                "failures": ["forbidden outcomes observed: declared-forbidden"],
+            },
+        )
+
+    def test_eval_command_does_not_add_untracked_generated_artifacts(self):
+        before = subprocess.run(
+            ["git", "status", "--porcelain", "--untracked-files=all"],
+            cwd=ROOT,
+            text=True,
+            capture_output=True,
+            check=True,
+        ).stdout
+        result = subprocess.run(
+            ["npm", "run", "eval"], cwd=ROOT, text=True, capture_output=True, check=False
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        after = subprocess.run(
+            ["git", "status", "--porcelain", "--untracked-files=all"],
+            cwd=ROOT,
+            text=True,
+            capture_output=True,
+            check=True,
+        ).stdout
+        self.assertEqual(after, before)
+
     def test_filesystem_and_git_assertions_report_scope_and_checkpoint_failures(self):
         script = """
             import { checkFilesystem } from './evals/dist/assertions/filesystem.js';
