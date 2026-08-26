@@ -1,0 +1,8 @@
+{
+  "name": "agentic-factory",
+  "private": true,
+  "scripts": {
+    "eval": "npm --prefix evals run eval",
+    "eval:live": "npm --prefix evals run eval:live"
+  }
+}
