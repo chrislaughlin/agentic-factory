@@ -19,21 +19,51 @@ function validateCase(value: unknown, index: number): EvalCase {
   }
   for (const key of ["required", "forbidden", "observed"] as const) if (!Array.isArray(item[key]) || item[key].some((id) => typeof id !== "string")) fail(`case ${index}: ${key} must be string[]`);
   if (typeof item.id !== "string" || typeof item.role !== "string" || typeof item.scenario !== "string") fail(`case ${index}: id, role, and scenario must be strings`);
-  if (!Array.isArray(item.assertions) || item.assertions.some((assertion) => {
-    if (!assertion || typeof assertion !== "object" || !("type" in assertion)) return true;
-    const candidate = assertion as Record<string, unknown>;
-    const type = candidate.type;
-    if (type === "output") {
-      return !isStringArrayOrAbsent(candidate.required) || !isStringArrayOrAbsent(candidate.forbidden);
-    }
-    return type !== "filesystem" && type !== "git";
-  })) fail(`case ${index}: assertions contain an invalid type`);
-  if (!item.state || typeof item.state !== "object") fail(`case ${index}: state must be an object`);
+  if (!Array.isArray(item.assertions) || item.assertions.some((assertion) => !isValidAssertion(assertion))) fail(`case ${index}: assertions contain invalid fields`);
+  if (!isValidState(item.state)) fail(`case ${index}: state contains invalid filesystem/Git values`);
   return item as EvalCase;
 }
 
 function isStringArrayOrAbsent(value: unknown): value is string[] | undefined {
   return value === undefined || (Array.isArray(value) && value.every((item) => typeof item === "string"));
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return !!value && typeof value === "object";
+}
+
+function hasOnlyKeys(value: Record<string, unknown>, allowed: readonly string[]): boolean {
+  return Object.keys(value).every((key) => allowed.includes(key));
+}
+
+function isValidAssertion(value: unknown): boolean {
+  if (!isRecord(value) || typeof value.type !== "string") return false;
+  if (value.type === "output") {
+    return hasOnlyKeys(value, ["type", "required", "forbidden"])
+      && isStringArrayOrAbsent(value.required)
+      && isStringArrayOrAbsent(value.forbidden);
+  }
+  if (value.type === "filesystem") {
+    return hasOnlyKeys(value, ["type", "changed", "forbiddenChanged"])
+      && Array.isArray(value.changed)
+      && value.changed.every((path) => typeof path === "string")
+      && isStringArrayOrAbsent(value.forbiddenChanged);
+  }
+  if (value.type === "git") {
+    return hasOnlyKeys(value, ["type", "headAdvanced", "nonEmptyCheckpoint", "changedPathsWithinScope"])
+      && typeof value.headAdvanced === "boolean"
+      && typeof value.nonEmptyCheckpoint === "boolean"
+      && (value.changedPathsWithinScope === undefined || typeof value.changedPathsWithinScope === "boolean");
+  }
+  return false;
+}
+
+function isValidState(value: unknown): value is EvalCase["state"] {
+  if (!isRecord(value) || !hasOnlyKeys(value, ["changedPaths", "headAdvanced", "nonEmptyCheckpoint", "changedPathsWithinScope"])) return false;
+  return (value.changedPaths === undefined || (Array.isArray(value.changedPaths) && value.changedPaths.every((path) => typeof path === "string")))
+    && ["headAdvanced", "nonEmptyCheckpoint", "changedPathsWithinScope"].every(
+      (key) => value[key] === undefined || typeof value[key] === "boolean",
+    );
 }
 
 async function loadCases(): Promise<EvalCase[]> {

@@ -9,6 +9,8 @@ type LiveResult = Pick<EvalCase, "observed" | "state"> & Partial<Pick<
   "id" | "role" | "scenario" | "required" | "forbidden" | "assertions"
 >>;
 
+type LivePromptInput = Pick<EvalCase, "id" | "role" | "scenario">;
+
 function fail(message: string): never {
   throw new Error(`live Codex result rejected: ${message}`);
 }
@@ -53,7 +55,12 @@ function validateLiveResult(value: unknown, testCase: EvalCase): LiveResult {
 export async function runCodex(testCase: EvalCase): Promise<EvalCase> {
   const command = process.env.CODEX_EVAL_COMMAND;
   if (!command) throw new Error("live Codex evals require CODEX_EVAL_COMMAND; fast evals do not require credentials");
-  const { stdout } = await execFileAsync(command, [JSON.stringify(testCase)], { maxBuffer: 1024 * 1024 });
+  const promptInput: LivePromptInput = {
+    id: testCase.id,
+    role: testCase.role,
+    scenario: testCase.scenario,
+  };
+  const { stdout } = await execFileAsync(command, [JSON.stringify(promptInput)], { maxBuffer: 1024 * 1024 });
   const result = validateLiveResult(JSON.parse(stdout) as unknown, testCase);
   return { ...testCase, observed: result.observed, state: result.state };
 }
