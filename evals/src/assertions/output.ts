@@ -1,8 +1,13 @@
 import type { EvalCase, Score } from "../types.js";
 
 export function scoreOutput(testCase: EvalCase): Score {
-  const required = new Set(testCase.required);
-  const forbidden = new Set(testCase.forbidden);
+  const outputAssertions = (testCase.assertions ?? []).filter((assertion) => assertion.type === "output");
+  const required = new Set(
+    outputAssertions.length ? outputAssertions.flatMap((assertion) => assertion.required ?? []) : testCase.required,
+  );
+  const forbidden = new Set(
+    outputAssertions.length ? outputAssertions.flatMap((assertion) => assertion.forbidden ?? []) : testCase.forbidden,
+  );
   const observed = new Set(testCase.observed);
   const missing = [...required].filter((id) => !observed.has(id));
   const falsePositives = [...forbidden].filter((id) => observed.has(id));

@@ -21,11 +21,19 @@ function validateCase(value: unknown, index: number): EvalCase {
   if (typeof item.id !== "string" || typeof item.role !== "string" || typeof item.scenario !== "string") fail(`case ${index}: id, role, and scenario must be strings`);
   if (!Array.isArray(item.assertions) || item.assertions.some((assertion) => {
     if (!assertion || typeof assertion !== "object" || !("type" in assertion)) return true;
-    const type = (assertion as { type?: unknown }).type;
-    return type !== "output" && type !== "filesystem" && type !== "git";
+    const candidate = assertion as Record<string, unknown>;
+    const type = candidate.type;
+    if (type === "output") {
+      return !isStringArrayOrAbsent(candidate.required) || !isStringArrayOrAbsent(candidate.forbidden);
+    }
+    return type !== "filesystem" && type !== "git";
   })) fail(`case ${index}: assertions contain an invalid type`);
   if (!item.state || typeof item.state !== "object") fail(`case ${index}: state must be an object`);
   return item as EvalCase;
+}
+
+function isStringArrayOrAbsent(value: unknown): value is string[] | undefined {
+  return value === undefined || (Array.isArray(value) && value.every((item) => typeof item === "string"));
 }
 
 async function loadCases(): Promise<EvalCase[]> {

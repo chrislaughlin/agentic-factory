@@ -1,5 +1,7 @@
+export type OutputAssertion = { type: "output"; required?: string[]; forbidden?: string[] };
+
 export type Assertion =
-  | { type: "output"; required?: string[]; forbidden?: string[] }
+  | OutputAssertion
   | { type: "filesystem"; changed: string[]; forbiddenChanged?: string[] }
   | { type: "git"; headAdvanced: boolean; nonEmptyCheckpoint: boolean; changedPathsWithinScope?: boolean };
 
