@@ -1,0 +1,13 @@
+{
+  "name": "agentic-factory-evals",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "eval": "tsc -p tsconfig.json && node dist/runner.js",
+    "eval:live": "tsc -p tsconfig.json && node dist/runner.js --live"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "typescript": "^5.8.0"
+  }
+}
