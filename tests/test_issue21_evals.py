@@ -233,6 +233,31 @@ class Issue21EvalTests(unittest.TestCase):
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("state contains invalid observed filesystem/Git state", result.stderr)
 
+    def test_live_response_state_payload_rejects_array(self):
+        fixture = {
+            "id": "invalid-live-state-array",
+            "role": "author-tests",
+            "scenario": "live response contains an array instead of state",
+            "required": [],
+            "forbidden": [],
+            "observed": [],
+            "assertions": [],
+            "state": {},
+        }
+        response = {"observed": [], "state": []}
+        with tempfile.TemporaryDirectory() as directory:
+            launcher = Path(directory) / "live-launcher"
+            launcher.write_text("#!/bin/sh\nprintf '%s\\n' '" + json.dumps(response) + "'\n")
+            launcher.chmod(0o755)
+            script = f"""
+                import {{ runCodex }} from './evals/dist/harnesses/codex.js';
+                await runCodex({json.dumps(fixture)});
+            """
+            env = os.environ | {"CODEX_EVAL_COMMAND": str(launcher)}
+            result = run_node(script, env=env)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("state contains invalid observed filesystem/Git state", result.stderr)
+
     def test_eval_command_does_not_add_untracked_generated_artifacts(self):
         before = subprocess.run(
             ["git", "status", "--porcelain", "--untracked-files=all"],

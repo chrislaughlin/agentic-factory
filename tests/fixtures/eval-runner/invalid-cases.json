@@ -7,5 +7,6 @@
   {"name": "invalid-filesystem-assertion", "content": [{"id": "bad-filesystem", "role": "author-tests", "scenario": "invalid", "required": [], "forbidden": [], "observed": [], "assertions": [{"type": "filesystem", "changed": "not-an-array", "unexpected": true}], "state": {}}]},
   {"name": "invalid-git-assertion", "content": [{"id": "bad-git", "role": "author-tests", "scenario": "invalid", "required": [], "forbidden": [], "observed": [], "assertions": [{"type": "git", "headAdvanced": "not-a-boolean", "nonEmptyCheckpoint": true}], "state": {}}]},
   {"name": "invalid-state-keys", "content": [{"id": "bad-state-keys", "role": "author-tests", "scenario": "invalid", "required": [], "forbidden": [], "observed": [], "assertions": [], "state": {"answerKey": ["secret"]}}]},
-  {"name": "invalid-state-values", "content": [{"id": "bad-state-values", "role": "author-tests", "scenario": "invalid", "required": [], "forbidden": [], "observed": [], "assertions": [], "state": {"changedPaths": ["tests/ok.py"], "headAdvanced": "not-a-boolean"}}]}
+  {"name": "invalid-state-values", "content": [{"id": "bad-state-values", "role": "author-tests", "scenario": "invalid", "required": [], "forbidden": [], "observed": [], "assertions": [], "state": {"changedPaths": ["tests/ok.py"], "headAdvanced": "not-a-boolean"}}]},
+  {"name": "invalid-state-array", "content": [{"id": "bad-state-array", "role": "author-tests", "scenario": "invalid", "required": [], "forbidden": [], "observed": [], "assertions": [], "state": []}]}
 ]
