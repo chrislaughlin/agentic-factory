@@ -3,5 +3,9 @@
   {"name": "missing-required-field", "content": [{"id": "incomplete"}]},
   {"name": "invalid-assertion-type", "content": [{"id": "bad-assertion", "role": "author-tests", "scenario": "invalid", "required": [], "forbidden": [], "observed": [], "assertions": [{"type": "unknown"}], "state": {}}]},
   {"name": "invalid-output-required", "content": [{"id": "bad-output-required", "role": "author-tests", "scenario": "invalid", "required": [], "forbidden": [], "observed": [], "assertions": [{"type": "output", "required": ["ok", 1]}], "state": {}}]},
-  {"name": "invalid-output-forbidden", "content": [{"id": "bad-output-forbidden", "role": "author-tests", "scenario": "invalid", "required": [], "forbidden": [], "observed": [], "assertions": [{"type": "output", "forbidden": "not-an-array"}], "state": {}}]}
+  {"name": "invalid-output-forbidden", "content": [{"id": "bad-output-forbidden", "role": "author-tests", "scenario": "invalid", "required": [], "forbidden": [], "observed": [], "assertions": [{"type": "output", "forbidden": "not-an-array"}], "state": {}}]},
+  {"name": "invalid-filesystem-assertion", "content": [{"id": "bad-filesystem", "role": "author-tests", "scenario": "invalid", "required": [], "forbidden": [], "observed": [], "assertions": [{"type": "filesystem", "changed": "not-an-array", "unexpected": true}], "state": {}}]},
+  {"name": "invalid-git-assertion", "content": [{"id": "bad-git", "role": "author-tests", "scenario": "invalid", "required": [], "forbidden": [], "observed": [], "assertions": [{"type": "git", "headAdvanced": "not-a-boolean", "nonEmptyCheckpoint": true}], "state": {}}]},
+  {"name": "invalid-state-keys", "content": [{"id": "bad-state-keys", "role": "author-tests", "scenario": "invalid", "required": [], "forbidden": [], "observed": [], "assertions": [], "state": {"answerKey": ["secret"]}}]},
+  {"name": "invalid-state-values", "content": [{"id": "bad-state-values", "role": "author-tests", "scenario": "invalid", "required": [], "forbidden": [], "observed": [], "assertions": [], "state": {"changedPaths": ["tests/ok.py"], "headAdvanced": "not-a-boolean"}}]}
 ]

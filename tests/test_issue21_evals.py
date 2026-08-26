@@ -171,6 +171,68 @@ class Issue21EvalTests(unittest.TestCase):
             result.stderr,
         )
 
+    def test_live_launcher_receives_only_scenario_fields_without_answer_key(self):
+        fixture = {
+            "id": "safe-live-input",
+            "role": "author-tests",
+            "scenario": "launcher must not receive scoring data",
+            "required": ["required-answer"],
+            "forbidden": ["forbidden-answer"],
+            "observed": [],
+            "assertions": [{"type": "output", "required": ["required-answer"]}],
+            "state": {"changedPaths": ["tests/expected.py"], "headAdvanced": True},
+        }
+        with tempfile.TemporaryDirectory() as directory:
+            launcher = Path(directory) / "live-launcher"
+            received = Path(directory) / "received.json"
+            launcher.write_text(
+                "#!/bin/sh\n"
+                "printf '%s' \"$1\" > \"" + str(received) + "\"\n"
+                "printf '%s\\n' '{\"observed\":[\"required-answer\"],\"state\":{}}'\n"
+            )
+            launcher.chmod(0o755)
+            script = f"""
+                import {{ runCodex }} from './evals/dist/harnesses/codex.js';
+                await runCodex({json.dumps(fixture)});
+            """
+            env = os.environ | {"CODEX_EVAL_COMMAND": str(launcher)}
+            result = run_node(script, env=env)
+            received_input = json.loads(received.read_text())
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(
+            received_input,
+            {"id": fixture["id"], "role": fixture["role"], "scenario": fixture["scenario"]},
+        )
+        self.assertNotIn("required", received_input)
+        self.assertNotIn("forbidden", received_input)
+        self.assertNotIn("assertions", received_input)
+        self.assertNotIn("state", received_input)
+
+    def test_live_response_state_payload_rejects_unknown_keys(self):
+        fixture = {
+            "id": "invalid-live-state",
+            "role": "author-tests",
+            "scenario": "live response contains an answer key in state",
+            "required": [],
+            "forbidden": [],
+            "observed": [],
+            "assertions": [],
+            "state": {},
+        }
+        response = {"observed": [], "state": {"answerKey": ["secret"]}}
+        with tempfile.TemporaryDirectory() as directory:
+            launcher = Path(directory) / "live-launcher"
+            launcher.write_text("#!/bin/sh\nprintf '%s\\n' '" + json.dumps(response) + "'\n")
+            launcher.chmod(0o755)
+            script = f"""
+                import {{ runCodex }} from './evals/dist/harnesses/codex.js';
+                await runCodex({json.dumps(fixture)});
+            """
+            env = os.environ | {"CODEX_EVAL_COMMAND": str(launcher)}
+            result = run_node(script, env=env)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("state contains invalid observed filesystem/Git state", result.stderr)
+
     def test_eval_command_does_not_add_untracked_generated_artifacts(self):
         before = subprocess.run(
             ["git", "status", "--porcelain", "--untracked-files=all"],
