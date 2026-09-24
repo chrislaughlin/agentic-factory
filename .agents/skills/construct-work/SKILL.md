@@ -11,6 +11,6 @@ Implement only the approved plan or supplied remediation findings. If implementa
 
 Keep unrelated changes intact. Prefer direct, repository-native designs and reuse canonical abstractions. Run focused checks during work and all construction-required checks before handoff.
 
-Inspect the final diff for scope and accidental changes. Create a checkpoint commit containing the production changes and any directly required documentation, but no test changes delegated to `author-tests`.
+Inspect the final diff for scope and accidental changes. Create a checkpoint commit containing the production changes, directly required documentation, and focused tests when the approved light or standard lane assigns them here. Do not edit tests delegated separately to `author-tests` in high assurance.
 
 Return the required stage result.

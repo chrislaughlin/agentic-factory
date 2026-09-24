@@ -3,6 +3,7 @@
     "stages": [
       "initial-questions",
       "repository-discovery",
+      "assurance-selection",
       "mapping",
       "planning-follow-up",
       "design",
@@ -57,6 +58,26 @@
     "ordered_stages": ["initial-questions", "repository-discovery", "mapping", "follow-up", "design", "follow-up", "conditional-review", "reconciliation", "exact-final-artifact-review", "explicit-approval", "construction"],
     "one_material_question_at_a_time": true,
     "construction_owner": "construct-work"
+  },
+  "cost_adaptive_assurance": {
+    "light": {
+      "planning_specialists": 0,
+      "construction_owns_focused_tests": true,
+      "independent_verification_passes": 0
+    },
+    "standard": {
+      "planning_specialists_max": 1,
+      "construction_owns_focused_tests": true,
+      "independent_verification_passes_max": 1,
+      "draft_after_deterministic_checks": true,
+      "second_remediation_requires_cost_checkpoint": true
+    },
+    "high": {
+      "separate_test_author": true,
+      "separate_security_qa_quality": true,
+      "remediation_attempts_max": 3
+    },
+    "test_only_change_invalidates_security": false
   },
   "technical_plan_review": {
     "trigger_classes": ["multi-layer", "api", "shared-type", "schema", "migration", "auth", "rollout", "security", "concurrency", "performance", "operability", "broad-impact-bug", "unresolved-material-decision", "unknown"],
