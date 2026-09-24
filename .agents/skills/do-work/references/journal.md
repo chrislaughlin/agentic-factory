@@ -20,6 +20,14 @@ Store each run at `<absolute-git-common-directory>/agent-factory/work/<task-key>
 ## Approved plan
 <scope, ordered changes, interfaces, risks, acceptance criteria, verification>
 
+## Assurance
+- Lane: light | standard | high
+- Reasons: <risk and change-surface evidence>
+- Included stages: <selected stages>
+- Skipped stages: <stage and evidence-based reason>
+- Escalation triggers: <conditions>
+- Cost checkpoints: <none or decisions>
+
 ## Repository context
 <resolved fields and source evidence required by [repository-discovery.md](repository-discovery.md)>
 

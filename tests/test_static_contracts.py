@@ -45,13 +45,21 @@ class StaticContractTests(unittest.TestCase):
                 self.assertRegex(adapter, r"(?m)^\s*bash\s*:\s*allow\s*$")
                 self.assertNotRegex(adapter, r"(?m)^\s*bash\s*:\s*(?:deny|ask)\s*$")
 
-    def test_orchestrator_contains_required_gates(self):
+    def test_orchestrator_contains_cost_adaptive_gates(self):
         do_work = (ROOT / ".agents/skills/do-work/SKILL.md").read_text()
         workflow = (ROOT / ".agents/skills/do-work/references/workflow.md").read_text()
+        assurance = (ROOT / ".agents/skills/do-work/references/assurance.md").read_text()
         self.assertIn("Ask exactly one material decision at a time", do_work)
         self.assertIn("explicit approval", do_work)
-        self.assertIn("run `review-security` against that immutable commit and `author-tests`", do_work)
-        self.assertIn("Permit three full remediation cycles", do_work)
+        self.assertIn("Light runs deterministic checks and targeted parent review", do_work)
+        self.assertIn("Standard runs deterministic checks and one independent verification pass", do_work)
+        self.assertIn("High assurance runs `review-security`", do_work)
+        self.assertIn("rerun only invalidated checks", do_work)
+        self.assertIn("### Light", assurance)
+        self.assertIn("### Standard", assurance)
+        self.assertIn("### High assurance", assurance)
+        self.assertIn("## Cost checkpoints", assurance)
+        self.assertIn("draft PR/MR", workflow)
         self.assertIn("`show-me`", do_work)
         self.assertIn("**Show me**", workflow)
         self.assertIn("Never merge or deploy", workflow)
@@ -180,6 +188,19 @@ class StaticContractTests(unittest.TestCase):
         self.assertIn("Every validated finding is blocking", (ROOT / ".agents/skills/review-code-quality/SKILL.md").read_text())
         self.assertIn("code-judo", quality)
 
+    def test_assurance_lanes_keep_tests_and_remediation_proportional(self):
+        assurance = (ROOT / ".agents/skills/do-work/references/assurance.md").read_text()
+        workflow = (ROOT / ".agents/skills/do-work/references/workflow.md").read_text()
+        construction = (ROOT / ".agents/skills/construct-work/references/contract.md").read_text()
+        journal = (ROOT / ".agents/skills/do-work/references/journal.md").read_text()
+        self.assertIn("one writable specialist plus at most one independent verification pass", assurance)
+        self.assertIn("optional hardening", assurance)
+        self.assertIn("new test framework", assurance)
+        self.assertIn("focused tests with the production change", construction)
+        self.assertIn("Invalidate security evidence only", workflow)
+        self.assertIn("Test-only assertion or fixture corrections do not automatically invalidate", workflow)
+        self.assertIn("Lane: light | standard | high", journal)
+
     def test_scenario_fixture_has_decision_complete_outcomes(self):
         scenarios = json.loads((ROOT / "tests/fixtures/scenarios.json").read_text())
         self.assertEqual(scenarios["happy_path"]["terminal_owner"], "human")
@@ -199,6 +220,13 @@ class StaticContractTests(unittest.TestCase):
         self.assertTrue(scenarios["worktree_isolation"]["block_modified_tracked_env_files"])
         self.assertTrue(scenarios["worktree_isolation"]["block_destination_symlink_ancestors"])
         self.assertEqual(scenarios["human_boundary"]["agent_must_not"], ["merge", "deploy"])
+        assurance = scenarios["cost_adaptive_assurance"]
+        self.assertEqual(assurance["light"]["planning_specialists"], 0)
+        self.assertEqual(assurance["standard"]["planning_specialists_max"], 1)
+        self.assertTrue(assurance["standard"]["draft_after_deterministic_checks"])
+        self.assertTrue(assurance["standard"]["second_remediation_requires_cost_checkpoint"])
+        self.assertEqual(assurance["high"]["remediation_attempts_max"], 3)
+        self.assertFalse(assurance["test_only_change_invalidates_security"])
 
     def test_planning_specialists_and_iterative_human_gate(self):
         manifest = json.loads((ROOT / "agents/manifest.json").read_text())
@@ -211,7 +239,7 @@ class StaticContractTests(unittest.TestCase):
         self.assertLess(do_work.index("`map-codebase`"), do_work.index("`design-solution`"))
         self.assertIn("Technical Blueprint", do_work)
         self.assertIn("Wait for explicit approval", do_work)
-        self.assertIn("not for minimizing questions", do_work)
+        self.assertIn("at most one planning specialist by default", do_work)
 
     def test_construction_checkpoint_and_access_fail_closed(self):
         workflow = (ROOT / ".agents/skills/do-work/references/workflow.md").read_text()

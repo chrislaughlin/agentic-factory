@@ -16,7 +16,7 @@ $shape-work <rough idea, customer problem, research, PRD, or opportunity>
 
 `shape-work` turns inputs of any maturity into an evidence-labelled, dependency-ordered set of work items. It selects the lightest useful combination of Lean, Design Thinking, Dual-Track Agile, Scrum/Kanban, and phase-gated practices; asks for human decisions at explicit gates; and emits items using the complete `$do-work` intake contract.
 
-The parent agent resolves and sharpens the work, waits for plan approval, delegates bounded stages, publishes a ready change, watches CI and reviews, and stops at the human merge/deploy gate.
+The parent agent resolves and sharpens the work, selects the lightest credible assurance lane, waits for plan approval, delegates bounded stages, publishes the change, watches CI when useful, and stops at the human merge/deploy gate.
 
 ## Lifecycle
 
@@ -49,31 +49,38 @@ flowchart LR
 flowchart LR
   H["Human selects one ready work reference"] --> D["do-work: interrogate, inspect, grill"]
   D --> RD["Repository discovery"]
-  RD --> MC["map-codebase"]
-  MC --> DS["design-solution"]
-  DS -->|"risk warrants"| RTP["review-technical-plan"]
-  DS -->|"no review needed"| RC["Reconcile and re-question"]
+  RD --> A{"Light / standard / high assurance"}
+  A -->|"light: parent"| RC["Map, design, reconcile"]
+  A -->|"standard: at most one planning specialist"| PS["Focused map or design"]
+  A -->|"high"| MC["map-codebase → design-solution"]
+  PS --> RC
+  MC -->|"risk warrants"| RTP["review-technical-plan"]
+  MC -->|"no review needed"| RC
   RTP --> RC
   RC --> AR["Exact artifact review: hash, revision, completeness"]
   AR -->|"explicit human approval"| WT["Task worktree and environment preflight"]
   WT --> C["construct-work"]
-  C --> S["review-security at pinned SHA"]
-  C --> T["author-tests + deterministic evals"]
-  S --> Q["verify-qa: runtime evidence"]
-  T --> Q
-  Q --> R["review-code-quality"]
-  R -->|"validated finding / test failure"| C
-  R -->|"all local gates pass"| P["Ready PR/MR"]
-  P --> W["watch-change"]
+  C --> V{"Lane verification"}
+  V -->|"light"| L["Checks + targeted parent review"]
+  V -->|"standard"| S["Checks + one independent pass"]
+  V -->|"high"| HIG["Security + independent tests + QA + quality"]
+  L --> P["Draft or ready PR/MR"]
+  S --> P
+  HIG --> P
+  P -->|"checks pending"| W["watch-change"]
+  P -->|"settled"| G["Human review gate"]
   W -->|"CI failure, requested changes, or merge conflict"| C
-  W -->|"green and settled"| SM["show-me: explain what was built"]
-  SM --> G["Human review gate"]
+  W -->|"green; visual useful"| SM["show-me"]
+  W -->|"green"| G
+  SM --> G
   G --> M["Human merges and deploys"]
 ```
 
-`do-work` always remains the orchestrator. Specialists cannot spawn agents or inherit the lifecycle. Production code has one writer (`construct-work`); security, QA, code-quality review, remote monitoring, and `show-me` are read-only; `author-tests` may change only tests and fixtures. After CI is green and review feedback is settled, `show-me` gives the developer a concise visual explanation of the tested change before human review.
+`do-work` always remains the orchestrator. Specialists cannot spawn agents or inherit the lifecycle. Production code has one writer (`construct-work`), which also owns focused tests in light and standard lanes. High-assurance work separates `author-tests`; security, QA, code-quality review, remote monitoring, and `show-me` remain read-only. `show-me` is used when a visual materially improves human review, not as a universal gate.
 
-Planning is an explicit sequence: initial questions → repository discovery → read-only codebase mapping → follow-up questions → solution design → follow-up questions → conditional technical-plan review → reconciliation → exact final reconciled blueprint review → explicit human approval → construction. `review-technical-plan` is required for multi-layer, API/shared-type/schema/migration/auth/rollout, material security/concurrency/performance/operability, broad-impact bug fixes, unresolved material decisions, and unknown classifications. A material blueprint change or content-hash mismatch requires review of the exact new artifact.
+Planning is an explicit sequence: initial questions → repository discovery → read-only codebase mapping → follow-up questions → solution design and final assurance classification → follow-up questions → conditional technical-plan review → reconciliation → exact final reconciled blueprint review → explicit human approval → construction. Light work keeps mapping and design in the parent; standard work uses at most one planning specialist by default; high-assurance work uses the full specialist sequence. `review-technical-plan` remains required for high-consequence contracts, migrations, authorization, security, concurrency, rollout, broad-impact fixes, unresolved material decisions, and unknown classifications. A material blueprint change or content-hash mismatch requires review of the exact new artifact.
+
+The assurance lanes make cost proportional to risk. Light work normally uses one writable specialist. Standard work adds at most one independent verification pass. High assurance retains separate security, test-authoring, runtime QA, and structural review. Remediation reruns only evidence invalidated by the change, and a cost checkpoint is required before extra specialists, a second standard remediation cycle, or new verification infrastructure.
 
 After plan approval, each work item receives a dedicated task branch and Git worktree under the narrowly writable Agent Factory worktree root, created from the recorded baseline. Writable stages preflight checkout identity and access, and the parent independently attests every construction checkpoint before verification. Required ignored local environment files—including repository-referenced nonstandard names—are copied from the journaled invoking checkout into matching relative paths without exposing their contents; unsafe symlinks, collisions, modified tracked files, and non-ignored environment files block delegation. Construction, tests, runtime QA, review, publication, and remediation use that worktree; the checkout where the human invoked `do-work` remains untouched. The journal lives in the Git common directory and records both absolute checkout paths for safe resumption. Agent Factory retains the worktree at handoff so the human can inspect it and remove it after review or merge.
 
@@ -90,7 +97,7 @@ After plan approval, each work item receives a dedicated task branch and Git wor
 | `review-technical-plan` | Conditional read-only review of the exact final blueprint |
 | `do-work` | User-invoked lifecycle orchestrator |
 | `construct-work` | Approved production implementation and remediation |
-| `author-tests` | Test/fixture authoring and deterministic checks |
+| `author-tests` | Independent high-assurance test/fixture authoring |
 | `review-security` | Pinned-revision security review |
 | `verify-qa` | Runtime acceptance verification |
 | `review-code-quality` | Strict structural and specification review |
@@ -148,17 +155,17 @@ It passes only with 100% required assertion recall and zero forbidden matches; m
 
 ## Operating rules
 
-- Planning aggressively eliminates material ambiguity, asks one human decision at a time with a recommended answer, and re-enters questioning after mapping, design, or plan review. Repository facts are discovered, not asked.
+- Planning eliminates material ambiguity proportionately, asks one human decision at a time unless a small coupled decision packet is clearer, and re-enters questioning only when mapping, design, or review exposes a material choice. Repository facts are discovered, not asked.
 - Repository discovery happens within every `do-work` run; it never requires an initialization hook, setup skill, or generated project contract.
 - No code changes begin until the human explicitly approves a decision-complete plan.
 - Every approved work item runs in its own Git worktree; unrelated changes in the invoking checkout are neither stashed nor copied into it.
 - New worktrees reproduce safely discoverable ignored local runtime environment files, including explicit `env_file` paths, while tracked templates continue to come from Git. Copied paths are revalidated before every checkpoint commit and push so later ignore-rule changes cannot expose them.
 - Oversized requests are sliced and wait for the human to select a slice.
-- Construction and test changes become separate Git checkpoint commits. Security reviews the immutable construction SHA while tests run in parallel.
-- QA requires runtime evidence for observable behavior. Missing required runtime access is blocked, not waived.
-- Every validated security risk and every validated strict code-quality finding blocks publication.
-- Initial verification and each distinct remote feedback batch receive three remediation cycles. Exhaustion stops with evidence and choices.
-- A ready PR/MR is created only after local gates pass. Legitimate requested changes are remediated automatically; conflicts, unsafe requests, scope expansion, and missing authority return to the human.
+- Construction owns focused tests in light and standard lanes. High assurance uses a separate test checkpoint while security reviews the immutable construction SHA.
+- Selected QA requires proportionate runtime evidence for observable behavior. Missing required runtime access is blocked, not waived.
+- Every validated security risk and code-quality finding from a selected gate blocks ready publication.
+- Light and standard work pause at the cost checkpoint before a second remediation cycle; high assurance permits up to three. Exhaustion stops with evidence and choices.
+- Light and standard work may create a draft PR/MR after deterministic checks; ready status requires the selected local gates. Legitimate requested changes rerun only invalidated evidence; conflicts, unsafe requests, scope expansion, and missing authority return to the human.
 - Monitoring is resumable through `$do-work <original-reference-or-pr-url>` and its ignored journal.
 - Agent Factory never merges, enables auto-merge, changes protection rules, deploys, or stores secrets.
 

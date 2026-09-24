@@ -25,17 +25,18 @@ The workflow operates natively across Codex, Claude Code, and OpenCode without i
 - Users begin with either `shape-work` for immature product inputs or `do-work` for a delivery-ready item.
 - Shaping and delivery are separate lifecycles; ready work remains human-selected rather than automatically entering implementation.
 - Each approved work item runs in a dedicated branch and sibling Git worktree created from a recorded baseline.
-- Specialist agents have bounded roles for research, challenge, construction, test authoring, security review, QA, code-quality review, and remote change monitoring.
+- Specialist agents have bounded roles for research, challenge, construction, test authoring, security review, QA, code-quality review, and remote change monitoring; cost-adaptive assurance decides which roles a work item actually needs.
 - GitHub and GitLab are the supported remote collaboration environments described by the repository.
 
 ## Capabilities and Constraints
 
 - Supports Codex, Claude Code, and OpenCode through portable skills and native agent adapters.
 - Requires explicit plan approval before production code changes begin.
-- Uses an interrogated planning sequence of initial questions, repository discovery, read-only mapping, solution design, conditional technical-plan review, reconciliation, exact final-artifact review, and explicit approval before construction.
-- Uses a single production-code writer; review roles are read-only, and the test author may edit only tests and fixtures.
+- Uses an interrogated planning sequence of initial questions, repository discovery, read-only mapping, solution design, assurance classification, conditional technical-plan review, reconciliation, exact final-artifact review, and explicit approval before construction.
+- Uses light, standard, and high-assurance lanes so specialist count, verification depth, and remediation cost match credible risk.
+- Uses a single production-code writer; it owns focused tests in light and standard lanes, while high assurance separates test authoring. Review roles remain read-only.
 - Uses versioned planning-result and technical-blueprint contracts with artifact identity, baseline SHA, canonical content hash, unresolved decisions, and acceptance/verification mappings.
-- Requires runtime evidence for observable behavior and treats validated security and code-quality findings as publication blockers.
+- Requires proportionate runtime evidence for observable behavior and treats validated security and code-quality findings from selected gates as publication blockers.
 - Preserves the invoking checkout by performing approved work in a dedicated worktree.
 - Never merges, enables auto-merge, changes branch-protection rules, deploys, or stores secrets.
 - Evaluates planning behavior with a portable deterministic runner over sanitized committed fixtures only; required assertion recall must be 100% and forbidden matches must be 0%.
@@ -57,7 +58,7 @@ The product name is **Agent Factory**. Its established voice is direct, technica
 ## Product Principles
 
 1. Keep consequential decisions human-gated and authority boundaries explicit.
-2. Improve agent capability without weakening specialist role separation or verification rigor.
+2. Match specialist separation and verification rigor to credible risk instead of maximizing stages by default.
 3. Make the complete path from rough input to review-ready change coherent, robust, and resumable.
 4. Preserve portability across Codex, Claude Code, and OpenCode without adding a proprietary orchestration runtime.
 5. Prefer repository evidence and runtime proof over assumptions or unverifiable claims.

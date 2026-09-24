@@ -48,7 +48,8 @@ class Issue21EvalTests(unittest.TestCase):
         )
         self.assertIn("shape-work/shape-vague-request PASS", result.stdout)
         self.assertIn("do-work/do-work-ambiguity PASS", result.stdout)
-        self.assertIn("Roles: 13/13 covered; cases: 15 passed, 0 failed.", result.stdout)
+        self.assertIn("do-work/do-work-cost-adaptive PASS", result.stdout)
+        self.assertIn("Roles: 13/13 covered; cases: 16 passed, 0 failed.", result.stdout)
 
     def test_required_forbidden_scoring_and_metrics_are_deterministic(self):
         script = """
